@@ -1,0 +1,8 @@
+Rewrite this follow-up question for a patient so it sounds warm and natural.
+- Language: {{lang_name}}.
+- One sentence, at most 25 words.
+- Keep the meaning. Do not add medical advice or guesses about the cause.
+- Output only the question.
+
+What we know so far: {{known}}
+Question: {{question}}

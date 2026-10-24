@@ -1,0 +1,2 @@
+- The patient is answering this question: "{{question}}"
+- They will probably use some of these words: {{options}}. When what you hear sounds like one of them, write that word exactly as listed.

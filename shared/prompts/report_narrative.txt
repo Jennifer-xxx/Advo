@@ -1,0 +1,9 @@
+Write a short history of present illness for a doctor, based only on the patient's symptom diary summary below.
+- Language: {{lang_name}}.
+- 4 to 6 sentences, plain clinical style, in time order.
+- Cover the main symptoms, how often they happened, the severity range and trend, triggers, what helped, and medicines with their effect.
+- Use only facts that are in the summary. No diagnosis, no treatment advice, and no numbers that are not in the summary.
+- Output only the paragraph.
+
+Summary JSON:
+{{summary_json}}

@@ -1,0 +1,291 @@
+[
+  {
+    "id": "demoen00",
+    "created_at": "2026-10-11T08:40",
+    "lang": "en",
+    "raw_text": "Woke up with a throbbing pain in my right temple. Only slept five hours last night. About a 5.",
+    "record": {
+      "symptom": "headache",
+      "location": "right temple",
+      "onset": "on waking",
+      "duration": null,
+      "character": [
+        "throbbing"
+      ],
+      "severity_0_10": 5,
+      "timing": null,
+      "aggravating": [
+        "poor sleep"
+      ],
+      "relieving": [],
+      "associated": [],
+      "medication": [],
+      "patient_quote": "a throbbing pain in my right temple"
+    },
+    "condition": "headache",
+    "red_flags": [],
+    "followups": 0,
+    "demo": true
+  },
+  {
+    "id": "demoen01",
+    "created_at": "2026-10-13T15:20",
+    "lang": "en",
+    "raw_text": "Headache came back in an afternoon meeting, worse staring at the screen, a bit sensitive to light. Took ibuprofen, a little better after an hour. 6.",
+    "record": {
+      "symptom": "headache",
+      "location": null,
+      "onset": "during an afternoon meeting",
+      "duration": null,
+      "character": [],
+      "severity_0_10": 6,
+      "timing": null,
+      "aggravating": [
+        "staring at the screen"
+      ],
+      "relieving": [],
+      "associated": [
+        "sensitive to light"
+      ],
+      "medication": [
+        {
+          "name": "ibuprofen",
+          "effect": "a little better after an hour"
+        }
+      ],
+      "patient_quote": "worse staring at the screen"
+    },
+    "condition": "headache",
+    "red_flags": [],
+    "followups": 0,
+    "demo": true
+  },
+  {
+    "id": "demoen02",
+    "created_at": "2026-10-14T22:10",
+    "lang": "en",
+    "raw_text": "So tired, no energy. Took over an hour to fall asleep.",
+    "record": {
+      "symptom": "fatigue",
+      "location": null,
+      "onset": null,
+      "duration": null,
+      "character": [
+        "no energy"
+      ],
+      "severity_0_10": null,
+      "timing": null,
+      "aggravating": [],
+      "relieving": [],
+      "associated": [
+        "trouble falling asleep"
+      ],
+      "medication": [],
+      "patient_quote": "Took over an hour to fall asleep"
+    },
+    "condition": "fatigue",
+    "red_flags": [],
+    "followups": 0,
+    "demo": true
+  },
+  {
+    "id": "demoen03",
+    "created_at": "2026-10-16T07:50",
+    "lang": "en",
+    "raw_text": "Headache, left side this time, like a tight band around my head. Nauseous, threw up once. 7.",
+    "record": {
+      "symptom": "headache",
+      "location": "left side",
+      "onset": null,
+      "duration": null,
+      "character": [
+        "like a tight band around my head"
+      ],
+      "severity_0_10": 7,
+      "timing": null,
+      "aggravating": [],
+      "relieving": [],
+      "associated": [
+        "nausea",
+        "vomiting"
+      ],
+      "medication": [],
+      "patient_quote": "like a tight band around my head"
+    },
+    "condition": "headache",
+    "red_flags": [],
+    "followups": 0,
+    "demo": true
+  },
+  {
+    "id": "demoen04",
+    "created_at": "2026-10-17T18:30",
+    "lang": "en",
+    "raw_text": "Still a bit of a headache, better than yesterday, a 3. Drank some warm water and rested.",
+    "record": {
+      "symptom": "headache",
+      "location": null,
+      "onset": null,
+      "duration": null,
+      "character": [],
+      "severity_0_10": 3,
+      "timing": null,
+      "aggravating": [],
+      "relieving": [
+        "rest"
+      ],
+      "associated": [],
+      "medication": [],
+      "patient_quote": "better than yesterday"
+    },
+    "condition": "headache",
+    "red_flags": [],
+    "followups": 0,
+    "demo": true
+  },
+  {
+    "id": "demoen05",
+    "created_at": "2026-10-19T13:00",
+    "lang": "en",
+    "raw_text": "Headache started after I walked out into the sun at noon, throbbing, light and noise both bother me. Took sumatriptan, much better after half an hour. 8.",
+    "record": {
+      "symptom": "headache",
+      "location": null,
+      "onset": "after going out at noon",
+      "duration": null,
+      "character": [
+        "throbbing"
+      ],
+      "severity_0_10": 8,
+      "timing": null,
+      "aggravating": [
+        "sunlight"
+      ],
+      "relieving": [],
+      "associated": [
+        "sensitive to light",
+        "sensitive to noise"
+      ],
+      "medication": [
+        {
+          "name": "sumatriptan",
+          "effect": "much better after half an hour"
+        }
+      ],
+      "patient_quote": "light and noise both bother me"
+    },
+    "condition": "headache",
+    "red_flags": [],
+    "followups": 0,
+    "demo": true
+  },
+  {
+    "id": "demoen06",
+    "created_at": "2026-10-20T23:00",
+    "lang": "en",
+    "raw_text": "Can't sleep again, my mind won't stop. Didn't fall asleep until after 1 am.",
+    "record": {
+      "symptom": "insomnia",
+      "location": null,
+      "onset": null,
+      "duration": null,
+      "character": [
+        "my mind won't stop"
+      ],
+      "severity_0_10": null,
+      "timing": null,
+      "aggravating": [],
+      "relieving": [],
+      "associated": [],
+      "medication": [],
+      "patient_quote": "my mind won't stop"
+    },
+    "condition": "fatigue",
+    "red_flags": [],
+    "followups": 0,
+    "demo": true
+  },
+  {
+    "id": "demoen07",
+    "created_at": "2026-10-22T09:15",
+    "lang": "en",
+    "raw_text": "Head feels a bit foggy this morning, a 2. No medicine.",
+    "record": {
+      "symptom": "headache",
+      "location": null,
+      "onset": "this morning",
+      "duration": null,
+      "character": [
+        "foggy"
+      ],
+      "severity_0_10": 2,
+      "timing": null,
+      "aggravating": [],
+      "relieving": [],
+      "associated": [],
+      "medication": [],
+      "patient_quote": "Head feels a bit foggy"
+    },
+    "condition": "headache",
+    "red_flags": [],
+    "followups": 0,
+    "demo": true
+  },
+  {
+    "id": "demoen08",
+    "created_at": "2026-10-23T16:40",
+    "lang": "en",
+    "raw_text": "Headache again this afternoon, right temple, after too long on the screen. 6. Ibuprofen didn't help.",
+    "record": {
+      "symptom": "headache",
+      "location": "right temple",
+      "onset": "this afternoon",
+      "duration": null,
+      "character": [],
+      "severity_0_10": 6,
+      "timing": null,
+      "aggravating": [
+        "long screen time"
+      ],
+      "relieving": [],
+      "associated": [],
+      "medication": [
+        {
+          "name": "ibuprofen",
+          "effect": "didn't help"
+        }
+      ],
+      "patient_quote": "Ibuprofen didn't help"
+    },
+    "condition": "headache",
+    "red_flags": [],
+    "followups": 0,
+    "demo": true
+  },
+  {
+    "id": "demoen09",
+    "created_at": "2026-10-24T10:30",
+    "lang": "en",
+    "raw_text": "A little headache again this morning, a 3, and my neck and shoulders feel tight.",
+    "record": {
+      "symptom": "headache",
+      "location": null,
+      "onset": "this morning",
+      "duration": null,
+      "character": [],
+      "severity_0_10": 3,
+      "timing": null,
+      "aggravating": [],
+      "relieving": [],
+      "associated": [
+        "tight neck and shoulders"
+      ],
+      "medication": [],
+      "patient_quote": "my neck and shoulders feel tight"
+    },
+    "condition": "headache",
+    "red_flags": [],
+    "followups": 0,
+    "demo": true
+  }
+]

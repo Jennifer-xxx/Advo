@@ -1,0 +1,5 @@
+Transcribe this audio recording word for word. The speaker is a patient describing how they feel physically, for a symptom diary.
+- The speaker is speaking {{lang_name}}. Write exactly what they say, in {{lang_name}}. Do not translate.
+- Chinese must be written in Simplified Chinese characters (简体中文), never Traditional characters.
+- Output only the transcript, with no explanation and no quotation marks.
+{{context}}

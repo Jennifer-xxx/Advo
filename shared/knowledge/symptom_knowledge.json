@@ -1,0 +1,228 @@
+{
+  "version": 1,
+  "note": "Starter content written for the hackathon. The team must check every condition list and red flag against public patient-education sources (e.g. MedlinePlus, NHS) before the demo. Not medical advice.",
+  "max_followups": 3,
+  "slot_order": [
+    "severity_0_10",
+    "onset",
+    "character",
+    "location",
+    "associated",
+    "aggravating",
+    "relieving",
+    "duration",
+    "medication"
+  ],
+  "slot_questions": {
+    "severity_0_10": {
+      "zh": "如果 0 是完全不难受，10 是你能想象到的最难受，现在大概几分？",
+      "en": "If 0 is no discomfort and 10 is the worst you can imagine, how bad is it right now?",
+      "options": {
+        "zh": ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"],
+        "en": ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+      },
+      "multi": false
+    },
+    "onset": {
+      "zh": "大概是什么时候开始的？",
+      "en": "When did it start?",
+      "options": {
+        "zh": ["刚刚", "今天早些时候", "昨天", "几天前", "一周以上"],
+        "en": ["Just now", "Earlier today", "Yesterday", "A few days ago", "Over a week ago"]
+      },
+      "multi": false
+    },
+    "character": {
+      "zh": "它更像哪种感觉？可以选，也可以用自己的话说。",
+      "en": "What does it feel like? Pick one or describe it in your own words.",
+      "options": {
+        "zh": ["刺痛", "钝痛", "胀痛", "一跳一跳的", "灼烧感", "压迫感", "绞痛", "酸痛", "发麻"],
+        "en": ["Sharp / stabbing", "Dull ache", "Throbbing", "Burning", "Pressure / tightness", "Cramping", "Aching", "Numb / tingling"]
+      },
+      "multi": true
+    },
+    "location": {
+      "zh": "具体在身体哪个位置？会不会窜到别的地方？",
+      "en": "Where exactly in your body is it? Does it spread anywhere?",
+      "options": {"zh": [], "en": []},
+      "multi": false
+    },
+    "associated": {
+      "zh": "同时还有别的不舒服吗？",
+      "en": "Is anything else bothering you at the same time?",
+      "options": {
+        "zh": ["没有", "恶心", "头晕", "乏力", "发烧", "睡不好"],
+        "en": ["Nothing else", "Nausea", "Dizziness", "Fatigue", "Fever", "Poor sleep"]
+      },
+      "multi": true
+    },
+    "aggravating": {
+      "zh": "有没有什么会让它更厉害？比如活动、吃东西、光线或压力？",
+      "en": "Does anything make it worse, like movement, eating, light or stress?",
+      "options": {
+        "zh": ["活动", "吃东西后", "光线", "噪音", "压力", "没睡好", "说不上来"],
+        "en": ["Movement", "After eating", "Light", "Noise", "Stress", "Poor sleep", "Not sure"]
+      },
+      "multi": true
+    },
+    "relieving": {
+      "zh": "有什么能让它好一点吗？",
+      "en": "Does anything make it a bit better?",
+      "options": {
+        "zh": ["休息", "躺下", "热敷", "冷敷", "吃东西", "没有"],
+        "en": ["Rest", "Lying down", "Heat", "Cold", "Eating", "Nothing helps"]
+      },
+      "multi": true
+    },
+    "duration": {
+      "zh": "每次大概持续多久？",
+      "en": "How long does each episode last?",
+      "options": {
+        "zh": ["几分钟", "半小时左右", "几个小时", "一整天", "一直都在"],
+        "en": ["A few minutes", "About half an hour", "A few hours", "All day", "Constant"]
+      },
+      "multi": false
+    },
+    "medication": {
+      "zh": "这次有吃药或用别的方法吗？效果怎么样？",
+      "en": "Did you take any medicine or try anything else? Did it help?",
+      "options": {
+        "zh": ["没有用药"],
+        "en": ["No medicine"]
+      },
+      "multi": false
+    }
+  },
+  "conditions": [
+    {
+      "id": "headache",
+      "label": {"zh": "头痛 / 偏头痛", "en": "Headache / migraine"},
+      "match": ["头痛", "头疼", "偏头痛", "太阳穴", "headache", "migraine"],
+      "associated_question": {
+        "zh": "头痛的时候，有没有下面这些情况？",
+        "en": "When you have the headache, do you also notice any of these?"
+      },
+      "associated_checklist": {
+        "zh": ["恶心或呕吐", "怕光", "怕吵", "看到闪光或视野缺一块", "脖子发僵", "都没有"],
+        "en": ["Nausea or vomiting", "Sensitive to light", "Sensitive to sound", "Flashing lights or blind spots", "Stiff neck", "None of these"]
+      }
+    },
+    {
+      "id": "abdominal",
+      "label": {"zh": "腹痛 / 肠胃不适", "en": "Abdominal pain / bowel symptoms"},
+      "match": ["肚子", "腹痛", "腹胀", "胃", "拉肚子", "腹泻", "便秘", "stomach", "abdominal", "belly", "bloat", "diarrhea", "constipat", "heartburn"],
+      "associated_question": {
+        "zh": "肚子不舒服的时候，有没有下面这些情况？",
+        "en": "When your stomach bothers you, do you also notice any of these?"
+      },
+      "associated_checklist": {
+        "zh": ["腹胀", "腹泻", "便秘", "排便后缓解", "反酸烧心", "都没有"],
+        "en": ["Bloating", "Diarrhea", "Constipation", "Better after a bowel movement", "Acid reflux / heartburn", "None of these"]
+      }
+    },
+    {
+      "id": "chest",
+      "label": {"zh": "胸闷 / 心慌", "en": "Chest discomfort / palpitations"},
+      "match": ["胸", "心慌", "心悸", "心跳", "气短", "喘", "chest", "palpitation", "heart racing", "short of breath"],
+      "associated_question": {
+        "zh": "有没有下面这些情况？",
+        "en": "Do you also notice any of these?"
+      },
+      "associated_checklist": {
+        "zh": ["出冷汗", "头晕", "恶心", "疼痛窜到手臂或下巴", "活动时加重", "都没有"],
+        "en": ["Cold sweat", "Dizziness", "Nausea", "Pain spreading to arm or jaw", "Worse with activity", "None of these"]
+      }
+    },
+    {
+      "id": "joint",
+      "label": {"zh": "关节 / 腰背痛", "en": "Joint / back pain"},
+      "match": ["关节", "膝盖", "手指", "腰", "背", "肩", "joint", "knee", "finger", "back pain", "shoulder", "stiff"],
+      "associated_question": {
+        "zh": "有没有下面这些情况？",
+        "en": "Do you also notice any of these?"
+      },
+      "associated_checklist": {
+        "zh": ["早上发僵", "关节肿", "发红发热", "活动后好转", "乏力", "都没有"],
+        "en": ["Morning stiffness", "Swollen joint", "Red or warm", "Better after moving", "Fatigue", "None of these"]
+      }
+    },
+    {
+      "id": "fatigue",
+      "label": {"zh": "乏力 / 睡眠", "en": "Fatigue / sleep"},
+      "match": ["累", "乏力", "没劲", "疲劳", "睡不着", "失眠", "tired", "fatigue", "exhausted", "no energy", "insomnia", "can't sleep", "fall asleep"],
+      "associated_question": {
+        "zh": "最近有没有下面这些情况？",
+        "en": "Lately, have you noticed any of these?"
+      },
+      "associated_checklist": {
+        "zh": ["睡不好", "食欲变化", "体重变化", "情绪低落", "发烧", "都没有"],
+        "en": ["Poor sleep", "Appetite change", "Weight change", "Low mood", "Fever", "None of these"]
+      }
+    }
+  ],
+  "none_answers": ["没有", "都没有", "没有用药", "nothing else", "none of these", "no medicine", "nothing helps", "not sure", "说不上来"],
+  "red_flags": [
+    {
+      "id": "chest_pain_with_breathing",
+      "all_of": [
+        ["胸痛", "胸口疼", "胸口痛", "胸口压", "胸闷", "chest pain", "chest tightness", "chest pressure", "tight chest"],
+        ["喘不上气", "呼吸困难", "气短", "出冷汗", "左臂", "下巴", "shortness of breath", "short of breath", "can't breathe", "cold sweat", "left arm", "jaw"]
+      ],
+      "message": {
+        "zh": "胸口不适同时伴有呼吸困难、出冷汗，或疼痛窜到手臂、下巴，可能需要紧急处理。请立即拨打 911 或去急诊。",
+        "en": "Chest discomfort with trouble breathing, a cold sweat, or pain spreading to your arm or jaw can be an emergency. Call 911 or go to the emergency room now."
+      }
+    },
+    {
+      "id": "sudden_severe_headache",
+      "any_of": ["一辈子最痛", "从来没这么痛", "突然剧烈头痛", "像被雷劈", "worst headache", "sudden severe headache", "thunderclap"],
+      "message": {
+        "zh": "突然出现的、从未有过的剧烈头痛需要马上就医。请立即拨打 911 或去急诊。",
+        "en": "A sudden, severe headache unlike any before needs urgent care. Call 911 or go to the emergency room now."
+      }
+    },
+    {
+      "id": "stroke_signs",
+      "any_of": ["一侧无力", "半边身体", "半边脸", "脸歪", "口齿不清", "说话不清", "突然看不见", "one side weak", "weakness on one side", "face drooping", "slurred speech", "can't speak", "sudden vision loss"],
+      "message": {
+        "zh": "一侧无力、脸歪或说话不清可能是中风征兆。请立即拨打 911。",
+        "en": "Weakness on one side, a drooping face or slurred speech can be signs of a stroke. Call 911 now."
+      }
+    },
+    {
+      "id": "bleeding",
+      "any_of": ["吐血", "便血", "黑便", "柏油样", "咳血", "vomiting blood", "blood in stool", "black stool", "tarry stool", "coughing up blood"],
+      "message": {
+        "zh": "吐血、便血、黑便或咳血需要尽快就医。请联系医生或去急诊。",
+        "en": "Vomiting blood, blood in your stool, black stools or coughing up blood need prompt care. Contact a doctor or go to the emergency room."
+      }
+    },
+    {
+      "id": "fainting",
+      "any_of": ["晕倒", "昏过去", "失去意识", "fainted", "passed out", "lost consciousness"],
+      "message": {
+        "zh": "晕倒或失去意识需要尽快就医，请联系医生；如果仍不舒服，请拨打 911。",
+        "en": "Fainting or losing consciousness should be checked soon. Contact a doctor, and call 911 if you still feel unwell."
+      }
+    },
+    {
+      "id": "fever_with_stiff_neck",
+      "all_of": [
+        ["发烧", "高烧", "fever"],
+        ["脖子僵", "脖子发僵", "颈部僵硬", "stiff neck"]
+      ],
+      "message": {
+        "zh": "发烧同时脖子发僵需要马上就医。请立即拨打 911 或去急诊。",
+        "en": "Fever together with a stiff neck needs urgent care. Call 911 or go to the emergency room now."
+      }
+    },
+    {
+      "id": "self_harm",
+      "any_of": ["想自杀", "不想活", "结束生命", "伤害自己", "kill myself", "suicide", "end my life", "hurt myself"],
+      "message": {
+        "zh": "听起来你现在很难受，你不需要一个人扛着。可以随时拨打或发短信到 988（美国自杀与危机生命线）和人聊聊；如果有立即的危险，请拨打 911。",
+        "en": "It sounds like you're going through a lot, and you don't have to handle it alone. You can call or text 988 (Suicide & Crisis Lifeline, US) any time. If you're in immediate danger, call 911."
+      }
+    }
+  ]
+}

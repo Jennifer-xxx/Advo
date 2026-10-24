@@ -1,0 +1,5 @@
+__pycache__/
+python/results/
+*.litertlm
+*.gguf
+.DS_Store

@@ -1,0 +1,291 @@
+[
+  {
+    "id": "demozh00",
+    "created_at": "2026-10-11T08:40",
+    "lang": "zh",
+    "raw_text": "早上醒来右边太阳穴一跳一跳地疼，昨晚只睡了五个小时。大概 5 分。",
+    "record": {
+      "symptom": "头痛",
+      "location": "右侧太阳穴",
+      "onset": "早上醒来",
+      "duration": null,
+      "character": [
+        "一跳一跳的"
+      ],
+      "severity_0_10": 5,
+      "timing": null,
+      "aggravating": [
+        "没睡好"
+      ],
+      "relieving": [],
+      "associated": [],
+      "medication": [],
+      "patient_quote": "右边太阳穴一跳一跳地疼"
+    },
+    "condition": "headache",
+    "red_flags": [],
+    "followups": 0,
+    "demo": true
+  },
+  {
+    "id": "demozh01",
+    "created_at": "2026-10-13T15:20",
+    "lang": "zh",
+    "raw_text": "下午开会的时候头又疼了，盯着屏幕更难受，有点怕光，吃了布洛芬，一个小时后好一点。6 分。",
+    "record": {
+      "symptom": "头痛",
+      "location": null,
+      "onset": "下午开会的时候",
+      "duration": null,
+      "character": [],
+      "severity_0_10": 6,
+      "timing": null,
+      "aggravating": [
+        "盯着屏幕"
+      ],
+      "relieving": [],
+      "associated": [
+        "怕光"
+      ],
+      "medication": [
+        {
+          "name": "布洛芬",
+          "effect": "一个小时后好一点"
+        }
+      ],
+      "patient_quote": "盯着屏幕更难受"
+    },
+    "condition": "headache",
+    "red_flags": [],
+    "followups": 0,
+    "demo": true
+  },
+  {
+    "id": "demozh02",
+    "created_at": "2026-10-14T22:10",
+    "lang": "zh",
+    "raw_text": "很累，没劲，躺下一个多小时才睡着。",
+    "record": {
+      "symptom": "乏力",
+      "location": null,
+      "onset": null,
+      "duration": null,
+      "character": [
+        "没劲"
+      ],
+      "severity_0_10": null,
+      "timing": null,
+      "aggravating": [],
+      "relieving": [],
+      "associated": [
+        "入睡困难"
+      ],
+      "medication": [],
+      "patient_quote": "躺下一个多小时才睡着"
+    },
+    "condition": "fatigue",
+    "red_flags": [],
+    "followups": 0,
+    "demo": true
+  },
+  {
+    "id": "demozh03",
+    "created_at": "2026-10-16T07:50",
+    "lang": "zh",
+    "raw_text": "头痛，这次是左边，像被箍住一样，还恶心，吐了一次。7 分。",
+    "record": {
+      "symptom": "头痛",
+      "location": "左侧",
+      "onset": null,
+      "duration": null,
+      "character": [
+        "像被箍住一样"
+      ],
+      "severity_0_10": 7,
+      "timing": null,
+      "aggravating": [],
+      "relieving": [],
+      "associated": [
+        "恶心",
+        "呕吐"
+      ],
+      "medication": [],
+      "patient_quote": "像被箍住一样"
+    },
+    "condition": "headache",
+    "red_flags": [],
+    "followups": 0,
+    "demo": true
+  },
+  {
+    "id": "demozh04",
+    "created_at": "2026-10-17T18:30",
+    "lang": "zh",
+    "raw_text": "头还是有点疼，比昨天好，3 分，喝了点热水休息了一下。",
+    "record": {
+      "symptom": "头痛",
+      "location": null,
+      "onset": null,
+      "duration": null,
+      "character": [],
+      "severity_0_10": 3,
+      "timing": null,
+      "aggravating": [],
+      "relieving": [
+        "休息"
+      ],
+      "associated": [],
+      "medication": [],
+      "patient_quote": "比昨天好"
+    },
+    "condition": "headache",
+    "red_flags": [],
+    "followups": 0,
+    "demo": true
+  },
+  {
+    "id": "demozh05",
+    "created_at": "2026-10-19T13:00",
+    "lang": "zh",
+    "raw_text": "中午出门晒太阳以后开始头痛，一跳一跳的，怕光怕吵，吃了舒马普坦，半小时后明显缓解。8 分。",
+    "record": {
+      "symptom": "头痛",
+      "location": null,
+      "onset": "中午出门以后",
+      "duration": null,
+      "character": [
+        "一跳一跳的"
+      ],
+      "severity_0_10": 8,
+      "timing": null,
+      "aggravating": [
+        "晒太阳"
+      ],
+      "relieving": [],
+      "associated": [
+        "怕光",
+        "怕吵"
+      ],
+      "medication": [
+        {
+          "name": "舒马普坦",
+          "effect": "半小时后明显缓解"
+        }
+      ],
+      "patient_quote": "晒太阳以后开始头痛，一跳一跳的"
+    },
+    "condition": "headache",
+    "red_flags": [],
+    "followups": 0,
+    "demo": true
+  },
+  {
+    "id": "demozh06",
+    "created_at": "2026-10-20T23:00",
+    "lang": "zh",
+    "raw_text": "又失眠了，脑子停不下来，到一点多才睡着。",
+    "record": {
+      "symptom": "失眠",
+      "location": null,
+      "onset": null,
+      "duration": null,
+      "character": [
+        "脑子停不下来"
+      ],
+      "severity_0_10": null,
+      "timing": null,
+      "aggravating": [],
+      "relieving": [],
+      "associated": [],
+      "medication": [],
+      "patient_quote": "脑子停不下来"
+    },
+    "condition": "fatigue",
+    "red_flags": [],
+    "followups": 0,
+    "demo": true
+  },
+  {
+    "id": "demozh07",
+    "created_at": "2026-10-22T09:15",
+    "lang": "zh",
+    "raw_text": "早上起来头有点昏，2 分，没吃药。",
+    "record": {
+      "symptom": "头痛",
+      "location": null,
+      "onset": "早上起来",
+      "duration": null,
+      "character": [
+        "昏"
+      ],
+      "severity_0_10": 2,
+      "timing": null,
+      "aggravating": [],
+      "relieving": [],
+      "associated": [],
+      "medication": [],
+      "patient_quote": "头有点昏"
+    },
+    "condition": "headache",
+    "red_flags": [],
+    "followups": 0,
+    "demo": true
+  },
+  {
+    "id": "demozh08",
+    "created_at": "2026-10-23T16:40",
+    "lang": "zh",
+    "raw_text": "下午头痛又来了，右边太阳穴，屏幕看久了，6 分，吃了布洛芬没什么用。",
+    "record": {
+      "symptom": "头痛",
+      "location": "右侧太阳穴",
+      "onset": "下午",
+      "duration": null,
+      "character": [],
+      "severity_0_10": 6,
+      "timing": null,
+      "aggravating": [
+        "屏幕看久了"
+      ],
+      "relieving": [],
+      "associated": [],
+      "medication": [
+        {
+          "name": "布洛芬",
+          "effect": "没什么用"
+        }
+      ],
+      "patient_quote": "吃了布洛芬没什么用"
+    },
+    "condition": "headache",
+    "red_flags": [],
+    "followups": 0,
+    "demo": true
+  },
+  {
+    "id": "demozh09",
+    "created_at": "2026-10-24T10:30",
+    "lang": "zh",
+    "raw_text": "今天早上又有一点头痛，3 分，脖子和肩膀发紧。",
+    "record": {
+      "symptom": "头痛",
+      "location": null,
+      "onset": "今天早上",
+      "duration": null,
+      "character": [],
+      "severity_0_10": 3,
+      "timing": null,
+      "aggravating": [],
+      "relieving": [],
+      "associated": [
+        "脖子和肩膀发紧"
+      ],
+      "medication": [],
+      "patient_quote": "脖子和肩膀发紧"
+    },
+    "condition": "headache",
+    "red_flags": [],
+    "followups": 0,
+    "demo": true
+  }
+]

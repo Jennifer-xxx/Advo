@@ -1,0 +1,4 @@
+We already know this about the current symptom: {{known}}
+We just asked the patient: "{{question}}"
+Below is their answer. Fill only the fields that this answer supports, and use null or [] for everything else.
+

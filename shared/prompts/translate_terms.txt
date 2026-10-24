@@ -1,0 +1,7 @@
+Translate each item in the JSON list below into {{lang_name}}.
+- These are a patient's own words from a symptom diary. Keep the meaning and the plain, everyday tone. Do not add medical interpretation.
+- Keep numbers and dates unchanged. For medicine names, use the usual {{lang_name}} name.
+- Return only one JSON object that maps each original item, exactly as given, to its translation.
+
+Items: {{items_json}}
+JSON:
