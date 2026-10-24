@@ -1,103 +1,151 @@
-# 症状日记 · Gemma 端侧 starter
+# CareLog
 
-慢性病症状记录助手：用户用自己的话（打字或语音）描述不舒服，Gemma 4 在手机上把它整理成固定字段，代码决定追问什么，最后生成一页给医生看的报告。全部推理在手机上完成，app 没有联网权限。
+**A private symptom diary for people with chronic conditions, powered by Gemma 4 running entirely on the phone.**
+
+Many patients find it hard to describe how they feel ("it just feels off", "a kind of pressure, I can't explain it"), and by the time they see a doctor the details of the last two weeks are gone. CareLog lets them talk or type in their own words. Gemma turns that into a structured record, the app gently asks for what is missing, and before an appointment it produces a one-page report the doctor can read in a minute.
+
+Built for the [Google Gemma Hardware Hackathon](https://www.agihouse.org/events/the-google-gemma-hardware-hackathon) (Mobile track) on a Pixel 11 Pro.
+
+- **100% on-device.** Gemma 4 runs through [LiteRT-LM](https://ai.google.dev/edge/litert-lm/android) on the phone's GPU. The app's manifest removes the `INTERNET` permission, so it physically cannot send data anywhere.
+- **The model understands, the code decides.** Gemma extracts symptoms and writes the report narrative. Which question to ask next, when to stop, and which symptoms are red flags are decided by plain code and a reviewable knowledge file.
+- **Bilingual.** The whole app runs in English or Chinese, and a report can be produced in the other language (useful for international students and immigrant families).
+
+## What it does
+
+| Screen | What happens |
+| --- | --- |
+| **Log** | Describe the symptom by typing or by voice. Gemma extracts it into fixed fields (what, where, since when, how bad, what it feels like, what makes it worse or better, other symptoms, medicines). The app then asks up to three follow-up questions about missing fields, with tap-to-answer options (a 0–10 scale, descriptor words like "throbbing" or "pressure", condition-specific checklists). Red-flag phrases trigger an immediate "call 911" style alert. |
+| **History** | Saved entries, stored only in the app's private storage. Two synthetic 14-day demo diaries (English and Chinese) can be loaded with one tap. |
+| **Report** | Pick 7, 14 or 30 days and a language. Code aggregates the entries (frequency, severity trend, top triggers, what helped, medicines and their effect, the patient's own words); Gemma writes a short history-of-present-illness paragraph from that summary only. The patient can edit it, add questions for the doctor, and save it as a PDF. |
+
+```mermaid
+flowchart LR
+    A[Patient speaks or types] --> B[Gemma 4: extract fields as JSON]
+    B --> C[Code: validate + safety guards + red-flag check]
+    C -->|red flag| R[Urgent-care alert]
+    C -->|missing fields| D[Code: pick next question + options]
+    D --> A
+    C -->|complete| E[(On-device diary)]
+    E --> F[Code: aggregate N days]
+    F --> G[Gemma 4: narrative, optional translation]
+    G --> H[One-page report / PDF]
+```
+
+### Voice input
+
+Two engines, switchable on the Log screen:
+
+- **Phone (offline):** Android's on-device speech recognizer, which on Pixel is Google's on-device speech service. Live captions, automatic end-of-speech, best Chinese accuracy. The app checks which language packs are installed and shows download progress if one is missing.
+- **Gemma:** the recording is sent straight to Gemma 4's audio input.
+
+Either way, Gemma does all of the understanding. If the patient answers a question out loud ("nausea, and a bit sensitive to light"), the matching option chips are selected automatically.
+
+### Safety rules in code
+
+- A 0–10 severity score is kept only if the patient's words actually contain a number.
+- Generic words ("hurts", "疼") are not accepted as a description of how something feels.
+- Red flags (chest pain with breathing trouble, sudden worst headache, one-sided weakness, bleeding, fainting, fever with stiff neck, self-harm) are matched by keyword with simple negation handling, so "no fever" does not trigger.
+- The model is never asked to diagnose or suggest medicines, and the report states that it is not a diagnosis.
+
+## Evaluation
+
+36 hand-written test sentences (18 English, 18 Chinese), including vague descriptions, negations ("no fever") and lab values that must not be read as severity. Each field is scored by accuracy or F1, and **hallucinations** count values the patient never said. Everything below was run on a MacBook (CPU) with the same model files the phone uses, unless noted.
+
+| Model and runtime | JSON valid | Hallucinations | Median time per sentence | Notes |
+| --- | --- | --- | --- | --- |
+| Gemma 4 E2B, GGUF QAT (llama.cpp) | 36/36 | 6 | 2.8 s | Final prompt design (v3) |
+| Gemma 4 E2B, LiteRT (phone format) | 36/36 | 14 | 6.7 s | Copied vague onset words from the prompt examples, which led to a prompt fix |
+| **Gemma 4 E4B, LiteRT** | 36/36 | **3** | 13.5 s | Best quality |
+| MedGemma 1.5 4B, LiteRT | 36/36 | 6 | 54.4 s | Medication F1 only 0.22; not used |
+| **Gemma 4 E4B, LiteRT, short output (shipped)** | 36/36 | 4 | 12.2 s | Medication 1.00, onset 0.97, timing 0.86 |
+
+What changed the results most:
+
+1. **One prompt per language.** A single bilingual prompt made the model answer English input in Chinese; separate `extract.en.txt` / `extract.zh.txt` fixed that.
+2. **Clear field definitions.** "Only the quality of the feeling itself" for `character`, and "the body part, even when it is part of the complaint" for `location`. With E2B, location and aggravating factors went from 0.89 and 0.91 to 1.00.
+3. **Code guards** for severity and generic words, plus never letting the model fill a field from the examples.
+4. **Short output.** Omitting empty fields makes the JSON for a short description several times shorter, which matters because generating tokens dominates on-device latency.
+
+On the Pixel 11 Pro (Tensor G6, GPU backend) with E4B: model load 21.6 s at app start, about 9–11 s per extraction with the full-length output, and 12 s for a report narrative. Answers given by tapping options need no model call.
+
+Reproduce with `python/eval_extraction.py` and compare runs with `python/compare_runs.py` (see below).
+
+## Repository layout
 
 ```
-gemma-symptom-diary/
-├── shared/                 两边共用的一份内容（改这里，Python 和 app 同时生效）
-│   ├── prompts/            抽取、追问改写、报告陈述、语音转写的 prompt
-│   ├── knowledge/          追问问题、病种伴随症状、危险信号（必须人工核对）
-│   ├── eval/               36 条中英文抽取测试句
-│   └── demo/               14 天合成演示数据（python/make_demo_data.py 生成）
-├── python/                 在 Mac 上迭代 prompt、跑评测、预览报告（只用于开发，不是 demo）
-└── android/                Kotlin + Jetpack Compose + LiteRT-LM 的 app
+shared/                 one copy of everything the app and the Python tools both use
+  prompts/              extraction (per language), follow-up context, transcription, report, translation
+  knowledge/            follow-up questions, condition checklists, red flags (must be clinically reviewed)
+  eval/                 36-sentence bilingual extraction test set
+  demo/                 synthetic 14-day diaries, English and Chinese
+android/                Kotlin + Jetpack Compose app using LiteRT-LM
+python/                 prompt iteration, evaluation, report preview (development only, not the demo)
+docs/                   sample reports rendered from the demo data
 ```
 
-## 1. Python：在 Mac 上迭代（不需要装任何 pip 包）
+The Android app packages `shared/` as assets, so editing a prompt or the knowledge file changes both the app (after a rebuild) and the evaluation.
 
-先在 Mac 上起一个本地模型服务（二选一）。LiteRT-LM 和手机上用的是同一个 `.litertlm` 文件，评测结果更接近手机。
+## Running the app
 
-```bash
-# A. LiteRT-LM（推荐）
-uv tool install litert-lm
-litert-lm serve --help            # 看清楚端口和加载模型的参数，再启动
+1. Install Android Studio and open the `android/` folder. If it asks for a Gradle JDK, choose **JVM 21** (Gradle 8.11.1 does not run on Java 25).
+2. On the phone, enable Developer options and USB debugging, connect it, and press **Run**.
+3. Download a model and push it to the app's folder. The app loads E4B if present, otherwise E2B:
 
-# B. llama.cpp
-llama-server -hf unsloth/gemma-4-E2B-it-qat-GGUF:UD-Q4_K_XL --port 8080
-```
+   ```bash
+   # https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm  (or gemma-4-E2B-it-litert-lm)
+   adb shell mkdir -p /sdcard/Android/data/com.gemmahack.symptomdiary/files
+   adb push gemma-4-E4B-it.litertlm /sdcard/Android/data/com.gemmahack.symptomdiary/files/
+   ```
+
+4. Restart the app. The status bar should read "Gemma ready · GPU". Reinstalling with **Run** keeps the model; uninstalling deletes it.
+
+Tested on a Pixel 11 Pro (16 GB RAM, Android 17). E4B needs a phone with plenty of memory; on 8 GB phones use E2B.
+
+## Running the evaluation
+
+The tools use only the Python standard library and talk to any local OpenAI-compatible server.
 
 ```bash
 cd python
-python3 tests/test_core.py                         # 不需要模型，确认代码没问题
-export GEMMA_BASE_URL=http://localhost:8080/v1     # 换成你的服务端口
-python3 gemma_client.py                            # 冒烟测试
-python3 eval_extraction.py --tag e2b               # 跑 36 条评测；换 E4B 后用 --tag e4b 再跑一次
-python3 interview.py                               # 在终端里走一遍完整追问
-python3 report.py --lang en --out report_en.html   # 用演示数据生成英文报告
+python3 tests/test_core.py                     # model-free unit tests
+
+# Option A: LiteRT-LM, same .litertlm files as the phone
+litert-lm import /path/to/gemma-4-E4B-it.litertlm
+litert-lm serve &                              # port 9379
+python3 eval_extraction.py --base-url http://127.0.0.1:9379/v1 --model gemma-4-E4B-it.litertlm --tag e4b
+
+# Option B: llama.cpp with a GGUF build
+llama-server -m gemma-4-E2B-it-qat-UD-Q4_K_XL.gguf --port 8080 -c 8192 --jinja --reasoning-budget 0 &
+python3 eval_extraction.py --tag e2b
+
+python3 compare_runs.py e2b e4b                # side-by-side table
+python3 interview.py                           # chat through one entry in the terminal
+python3 report.py --lang en --out report.html  # report from the demo diary
 ```
 
-评测输出每个字段的准确率或 F1、幻觉数（没说却填了）和漏填数，结果存在 `python/results/`。测试集格式写在 `eval_extraction.py` 开头。
+Turn off Gemma 4's thinking mode on llama.cpp (`--reasoning-budget 0`); otherwise it spends the token budget thinking and never writes the JSON.
 
-## 2. Android：第一次跑起来
+## Changing behaviour
 
-1. 装最新版 Android Studio，用 **File → Open** 打开 `android/` 文件夹，等 Gradle sync 完成（第一次会下载几 GB，务必在家做）。
-   - 提示升级 Android Gradle Plugin：可以接受。
-   - 报错说 Kotlin metadata 版本不兼容：把 `android/build.gradle.kts` 里两处 `2.3.0` 改成报错建议的版本。
-   - 想在命令行编译：先 `brew install gradle`，在 `android/` 里跑一次 `gradle wrapper`，之后用 `./gradlew installDebug`。
-2. 手机：设置 → 关于手机 → 连点「版本号」开启开发者选项 → 打开 USB 调试。Mac 上 `adb devices` 能看到手机。
-3. 点 Run ▶ 装到手机并打开一次。状态栏会显示「找不到模型文件」，这是正常的，这一步只是为了创建 app 的文件夹。
-4. 下载模型并推到手机：
-
-   ```bash
-   hf download litert-community/gemma-4-E2B-it-litert-lm gemma-4-E2B-it.litertlm --local-dir ~/gemma
-   adb push ~/gemma/gemma-4-E2B-it.litertlm /sdcard/Android/data/com.gemmahack.symptomdiary/files/
-   ```
-
-5. 关掉 app 再打开，状态栏应显示「Gemma 已就绪 · GPU」（GPU 失败会自动退到 CPU）。
-6. 冒烟测试：「历史」→ 加载演示数据 →「报告」→ 生成报告 → 导出 PDF；再到「记录」里打一句话，看追问是否出现。
-7. 确认没有联网权限：Android Studio → Build → Analyze APK → 打开 `AndroidManifest.xml`，里面不应有 `INTERNET`。
-
-## 3. 第一次 build 最可能遇到的问题
-
-| 现象 | 处理 |
+| To change | Edit |
 | --- | --- |
-| `GemmaEngine.kt` 里 `Contents`、`Backend.CPU()`、`EngineConfig` 参数报 unresolved | 只改这一个文件。代码按 `litertlm-android:0.18.0` 的文档写，文件开头列了旧版本的写法；也可以对照[官方 Android 指南](https://ai.google.dev/edge/litert-lm/android)或 Gallery 源码 |
-| 找不到 `litertlm-android:0.18.0` | 把 `android/app/build.gradle.kts` 里的版本改成 `latest.release`，再按上一行对照 API |
-| Kotlin metadata 版本不兼容 | 提高 `android/build.gradle.kts` 里的 Kotlin 版本 |
-| `checkAarMetadata` 要求更高的 compileSdk | 把 `compileSdk` 改成报错里的数字 |
-| 「找不到模型文件」 | 先打开过一次 app；文件名必须是 `gemma-4-E2B-it.litertlm` 或 `gemma-4-E4B-it.litertlm` |
-| 录音后崩溃或转写为空 | 看 Logcat 里 `GemmaEngine` 的报错；确认 `EngineConfig` 的 `audioBackend` 写法；不行就先只用文字输入 |
-| 内存不足、app 被杀 | 用 E2B；关掉其他 app |
-| JSON 经常不合法 | 先在 Mac 上用 `eval_extraction.py` 改 prompt；改完 `shared/prompts` 需要重新 build app |
+| Extraction rules and examples | `shared/prompts/extract.en.txt`, `extract.zh.txt` |
+| Follow-up questions, options, order, maximum number | `shared/knowledge/symptom_knowledge.json` (`slot_questions`, `slot_order`, `max_followups`) |
+| Condition checklists and red flags | same file, `conditions` and `red_flags` |
+| Test sentences | `shared/eval/extraction_testset.jsonl` (format documented in `eval_extraction.py`) |
+| Demo diaries | `python/make_demo_data.py`, then run it |
 
-遇到报错时，把 Logcat 或 Gradle 的完整报错贴给 Claude Code，在 `android/` 目录里让它直接改。
+The Python and Kotlin logic mirror each other: `extraction.py` and `interview.py` match `Interview.kt`; `report.py` matches `Report.kt`.
 
-## 4. 想改什么，改哪里
+## Roadmap
 
-| 想改 | 文件 |
-| --- | --- |
-| prompt | `shared/prompts/*.txt` |
-| 追问问题、选项、追问顺序、最多几轮 | `shared/knowledge/symptom_knowledge.json` 的 `slot_questions`、`slot_order`、`max_followups` |
-| 病种和伴随症状清单 | 同上，`conditions` |
-| 危险信号 | 同上，`red_flags`（必须对照 MedlinePlus、NHS 等公开资料核对） |
-| 评测集 | `shared/eval/extraction_testset.jsonl` |
-| 演示数据 | `python/make_demo_data.py`，改完运行一次 |
+- Live voice conversation: Gemma replies out loud, keeping one conversation open so turns are fast.
+- PDF download and sharing through the system share sheet.
+- Gemma on the Tensor G6 TPU (precompiled E2B) for the conversation, E4B on the GPU for extraction.
+- Camera: read a medicine box or prescription label with Gemma's vision input.
+- Sleep and heart rate from Health Connect next to symptoms in the report.
+- Diary encrypted with a hardware-backed key; "have I felt this before?" search with EmbeddingGemma.
 
-Python 和 Kotlin 是一一对应的：`extraction.py` / `interview.py` ↔ `Interview.kt`，`report.py` ↔ `Report.kt`。改了一边的逻辑，记得同步另一边。
+## Disclaimer
 
-## 5. 语言和语音
-
-- 右上角按钮切换整个 app 的语言（中文 / English）。切换后会开一条新记录，界面、追问、选项、语音识别都只用这一种语言。
-- 报告页可以单独选报告语言。记录是另一种语言时，app 会先让 Gemma 把患者原话翻译过来；原话保留在括号里。
-- 演示数据有中英文两套（`shared/demo/demo_entries.json` 和 `demo_entries_en.json`），按当前语言加载。
-- 语音有两种引擎，在记录页底部切换：「手机离线识别」用 Android 自带的离线听写，中文更准；「Gemma 听写」直接把录音交给 Gemma。两种都不联网，理解、追问和报告始终由 Gemma 完成。手机离线识别第一次使用某个语言时可能要下载语音包，需要联网，请提前完成。
-
-## 6. 已知限制
-
-- Kotlin 代码还没有被编译过（写的时候没有 Android SDK），第一次 build 大概率要修几处 API 名字。Python 部分有单元测试，并用模拟的本地服务端到端跑通过。
-- 危险信号是关键词规则加简单的否定判断（例如「没有发烧」不算），宁可多报。
-- 记录存在 app 私有目录的一个 JSON 文件里，没有加密。
-- 单段录音最长 30 秒。模型或手机不支持音频时，app 会自动关闭语音，只用文字。
-- LiteRT-LM 有一个公开 issue（#3849）报告模型输出某些全角符号时原生层崩溃；中文输出时如果遇到闪退，先看 Logcat 是否是这个原因。
-- 报告样式可以直接看 `docs/sample_report_zh.html` 和 `docs/sample_report_en.html`（演示数据，陈述段是占位文字）。
-- 内容为演示用途，不是医疗器械，不做诊断。
+CareLog is a hackathon prototype, not a medical device. It does not diagnose or give treatment advice. The red-flag list and condition checklists were written for the demo and must be reviewed against clinical sources before any real use. All demo data is synthetic.

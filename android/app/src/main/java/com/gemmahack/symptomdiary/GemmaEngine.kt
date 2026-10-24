@@ -145,7 +145,7 @@ class GemmaEngine(private val context: Context) {
     companion object {
         private const val TAG = "GemmaEngine"
 
-        /** First file found wins. Keep only the one you want on the phone, or reorder. */
-        val MODEL_FILES = listOf("gemma-4-E2B-it.litertlm", "gemma-4-E4B-it.litertlm")
+        /** First file found wins: E4B (better quality) if it is on the phone, otherwise E2B. */
+        val MODEL_FILES = listOf("gemma-4-E4B-it.litertlm", "gemma-4-E2B-it.litertlm")
     }
 }

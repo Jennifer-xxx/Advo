@@ -171,6 +171,9 @@ private fun RecordScreen(vm: DiaryViewModel) {
             OutlinedButton(onClick = vm::skip, enabled = !vm.busy && vm.question != null) { Text(tx.skip) }
             Button(onClick = vm::save, enabled = !vm.busy) { Text(tx.save) }
             TextButton(onClick = vm::newEntry, enabled = !vm.busy) { Text(tx.newEntry) }
+            if (vm.voiceStatus.isNotEmpty() && vm.voiceEngine == "system") {
+                Text(vm.voiceStatus, style = MaterialTheme.typography.bodySmall, modifier = Modifier.fillMaxWidth())
+            }
             FilterChip(
                 selected = vm.voiceEngine == "system",
                 onClick = vm::toggleVoiceEngine,

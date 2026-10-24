@@ -59,6 +59,10 @@ class DiaryViewModel(app: Application) : AndroidViewModel(app) {
     var question by mutableStateOf<Question?>(null)
         private set
     val selected = mutableStateListOf<String>()
+    /** One line under the voice buttons: pack status / download progress. */
+    var voiceStatus by mutableStateOf("")
+        private set
+    private var downloading = false
     var voiceEngine by mutableStateOf(
         prefs.getString("voice", null) ?: if (speech.available()) "system" else "gemma")
         private set
@@ -91,6 +95,7 @@ class DiaryViewModel(app: Application) : AndroidViewModel(app) {
 
     fun switchLang() {
         if (busy || recording) return
+        voiceStatus = ""
         lang = if (lang == "zh") "en" else "zh"
         prefs.edit().putString("lang", lang).apply()
         reportLang = lang
@@ -221,27 +226,68 @@ class DiaryViewModel(app: Application) : AndroidViewModel(app) {
             info(tx.systemUnavailable)
             return
         }
+        if (downloading) {
+            voiceStatus = tx.packStillDownloading
+            return
+        }
+        val speakLang = lang
+        // Ask the phone first: is the pack for this language installed, downloading, or downloadable?
+        speech.checkPack(speakLang) { pack, tag ->
+            when (pack) {
+                SystemSpeech.Pack.INSTALLED, SystemSpeech.Pack.UNKNOWN -> {
+                    voiceStatus = tx.packReady(tag)
+                    listenSystem(speakLang)
+                }
+                SystemSpeech.Pack.DOWNLOADING -> voiceStatus = tx.packStillDownloading
+                SystemSpeech.Pack.DOWNLOADABLE -> downloadPack(speakLang, tag)
+                SystemSpeech.Pack.UNSUPPORTED -> {
+                    voiceEngine = "gemma"
+                    voiceStatus = ""
+                    info(tx.packUnsupported)
+                }
+            }
+        }
+    }
+
+    private fun downloadPack(speakLang: String, tag: String) {
+        downloading = true
+        voiceStatus = tx.packDownloading(tag, null)
+        speech.downloadPack(
+            speakLang,
+            progress = { pct -> voiceStatus = tx.packDownloading(tag, pct) },
+            done = {
+                downloading = false
+                voiceStatus = tx.packDone
+            },
+            scheduled = {
+                downloading = false
+                voiceStatus = tx.packScheduled
+            },
+            failed = { code ->
+                downloading = false
+                voiceStatus = tx.packFailed(code)
+            },
+        )
+    }
+
+    private fun listenSystem(speakLang: String) {
         val before = input
         val q = question
-        val speakLang = lang
         recording = true
         info(tx.listening)
         speech.start(
             speakLang,
-            onPartial = { partial -> input = (before + " " + partial).trim() },
-            onResult = { text ->
+            partial = { heard -> input = (before + " " + heard).trim() },
+            result = { text ->
                 recording = false
                 val clean = toSimplified(text.trim())
                 input = (before + " " + clean).trim()
                 if (clean.isEmpty()) info(tx.notHeard) else if (q != null) autoSelect(q, clean)
             },
-            onError = { code ->
+            failed = { code ->
                 recording = false
                 when {
-                    SystemSpeech.isMissingPack(code) -> {
-                        speech.downloadPack(speakLang)
-                        info(tx.downloadingPack)
-                    }
+                    SystemSpeech.isMissingPack(code) -> downloadPack(speakLang, speech.tagFor(speakLang))
                     SystemSpeech.isNotHeard(code) -> info(tx.notHeard)
                     else -> info(tx.micError("speech error $code"))
                 }
@@ -372,7 +418,7 @@ class DiaryViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     override fun onCleared() {
-        speech.destroy()
+        speech.release()
         gemma.close()
     }
 }

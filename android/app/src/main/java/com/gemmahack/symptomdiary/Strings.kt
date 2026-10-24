@@ -56,9 +56,22 @@ class Texts(val lang: String) {
     fun micError(msg: String?) = t("无法录音：", "Can't record: ") + msg
     val noAudio = t("没有录到声音，再试一次", "No sound was recorded. Try again.")
     val notHeard = t("没有听清，再说一次试试", "Didn't catch that. Try again.")
-    val downloadingPack = t(
-        "正在下载这个语言的离线语音包，下载好再试一次。需要联网，请在去现场前完成。",
-        "Downloading the offline speech pack for this language. Try again when it finishes. This needs a connection, so do it before the event.",
+    fun packReady(tag: String) = t("离线语音包已就绪（$tag）", "Offline speech pack ready ($tag)")
+    fun packDownloading(tag: String, pct: Int?) =
+        t("正在下载离线语音包（$tag）", "Downloading offline speech pack ($tag)") + (pct?.let { " · $it%" } ?: "…")
+    val packStillDownloading = t(
+        "系统还在后台下载这个语言的语音包，稍后再点一次「说出来」。也可以先切到 Gemma 听写。",
+        "The system is still downloading this language's pack. Tap Speak again in a bit, or switch to Gemma for now.",
+    )
+    val packDone = t("语音包下载完成，点「说出来」开始。", "Speech pack installed. Tap Speak to start.")
+    val packScheduled = t(
+        "系统已安排下载（可能要等连上 Wi-Fi 或充电时）。过一会儿再点「说出来」检查。",
+        "The system scheduled the download (it may wait for Wi-Fi or charging). Tap Speak again later to check.",
+    )
+    fun packFailed(code: Int) = t("语音包下载失败（错误 $code），请先用 Gemma 听写。", "Speech pack download failed (error $code). Use Gemma for now.")
+    val packUnsupported = t(
+        "这台手机的离线识别不支持当前语言，已切换到 Gemma 听写。",
+        "On-device recognition doesn't support this language on this phone. Switched to Gemma.",
     )
 
     // history

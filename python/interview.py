@@ -70,7 +70,7 @@ class Question:
 
 class Interview:
     def __init__(self, client, knowledge: dict | None = None, lang: str | None = None,
-                 rephrase: bool = True):
+                 rephrase: bool = False):
         self.client = client
         self.k = knowledge or load_knowledge()
         self.lang = lang
@@ -185,11 +185,11 @@ def main():
 
     ap = argparse.ArgumentParser(description="Chat through one diary entry in the terminal.")
     ap.add_argument("--base-url", default=DEFAULT_BASE_URL)
-    ap.add_argument("--no-rephrase", action="store_true", help="use the template questions as-is")
+    ap.add_argument("--rephrase", action="store_true", help="let Gemma reword each follow-up (one extra call each)")
     ap.add_argument("--save", help="append the finished entry to this JSON file")
     args = ap.parse_args()
 
-    iv = Interview(GemmaClient(args.base_url), rephrase=not args.no_rephrase)
+    iv = Interview(GemmaClient(args.base_url), rephrase=args.rephrase)
     state = iv.start(input("描述一下你哪里不舒服 / How are you feeling?\n> "))
     while True:
         for msg in state["red_flags"]:

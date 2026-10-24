@@ -118,7 +118,8 @@ class Interview(
     private val assets: AppAssets,
     /** The app's language ("zh" or "en"). Questions, options and phrasing all follow it. */
     val lang: String,
-    private val rephrase: Boolean = true,
+    /** Rewording each follow-up with Gemma costs one extra model call per question; templates read fine. */
+    private val rephrase: Boolean = false,
 ) {
     private val k = assets.knowledge
     private val sep = if (lang == "zh") "、" else ", "
