@@ -52,6 +52,14 @@ Source of truth: `../specifications/WITH-YOU-FEATURES-PRD.md`, `../specification
 | F05 | Explicitly scoped local exports; separate audio/explanation deletion and full visit deletion with confirmation. | Profile/state provenance is retained when deleting its originating visit. User-exported files/backups require separate management. |
 | F06 | Password-encrypted portable local backup, authenticated/validated staged restore, stable-ID merge and unreadable-index recovery. | No cloud backup or password recovery. Native wrong-password/tamper/idempotency checks included. |
 
+## Updated interaction requirements
+
+The later user instructions supersede the original screen sequence: daily symptom conversations are long-term Library entries, not appointments. `RecordKind` separates symptom entries, actual visits and health-profile maintenance. A brief selects symptom entry IDs and snapshots their history without converting or modifying those entries. The Visits tab provides a direct recording entry point.
+
+Talk is now an automatic listen → short local Gemma response → offline spoken reply → listen loop. One persistent `TalkSession` checkpoints patient and assistant turns separately. One source contains only the combined patient dictation; Done saves it and generates one summary. A token guard prevents stale callbacks from resuming the microphone after pause/navigation/backgrounding. Technical controls and export choices are secondary menus.
+
+Brief generation uses compact, bounded patient-text batches, retries ungrounded output once, accepts equivalent numeric typography, rejects changed dose units and stores a specific error for in-place retry. Routine thinking is disabled explicitly; background extraction is not chained automatically after a conversation. Native generation has an explicit Stop action and task/elapsed-time labels. Restart recovery clears abandoned processing states.
+
 ## Release gates retained
 
 Before use beyond a synthetic hackathon demonstration: validate speech/OCR/translation on representative patient language, medication and uncertainty cases; clinically review patient-facing copy; evaluate real conversations and conflicts; test long recordings, device interruptions, storage exhaustion and thermal/power behavior; perform complete accessibility checks. A broad drug checker requires an appropriate licensed, versioned local reference dataset and its own validation. A Tensor TPU path requires compatible compiled artifacts and vendor libraries.

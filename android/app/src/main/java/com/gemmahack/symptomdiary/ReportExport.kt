@@ -29,7 +29,7 @@ object ReportExport {
 
     fun render(context: Context, report: ReportSnapshot): File {
         val file = File(File(context.cacheDir, "reports").apply { mkdirs() }, "Advo-${report.id}-v${report.version}.pdf")
-        val symptoms = report.symptoms.map { factLine(it) }.ifEmpty {
+        val symptoms = (if (report.communicationSummary.isNotBlank()) listOf(report.communicationSummary) else report.symptoms.map { factLine(it) }).ifEmpty {
             report.originalWords.map { "Patient's words: $it" }.ifEmpty { listOf("Not recorded. Discuss with the patient.") }
         }.map { Line(it, highlight = true) }
         val concerns = listOf(Line("ALSO WANTS TO DISCUSS", 2)) +

@@ -9,12 +9,40 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.concurrent.Executors
 
+class ProcessingStoppedException : Exception("Local processing stopped. Your originals are saved.")
+
 /** The only LiteRT-LM adapter. All native operations, including close, use the same GPU thread. */
 class GemmaEngine(private val context: Context) {
     data class Result(val text: String, val seconds: Double)
     private val dispatcher = Executors.newSingleThreadExecutor { Thread(it, "with-you-gemma") }.asCoroutineDispatcher()
     private val mutex = Mutex()
     private var engine: Engine? = null
+    private var talkConversation: Conversation? = null
+    private var talkSessionId: String? = null
+    private var cachedTurnCount = 0
+    private val cancellationLock = Any()
+    private var activeConversation: Conversation? = null
+    private var stopRequested = false
+    val generating: Boolean get() = synchronized(cancellationLock) { activeConversation != null }
+
+    /** LiteRT-LM's cancellation flag interrupts generation; resources still close on the GPU thread. */
+    fun stopGeneration(): Boolean = synchronized(cancellationLock) {
+        val active = activeConversation ?: return@synchronized false
+        stopRequested = true
+        runCatching { active.cancelProcess() }.isSuccess
+    }
+
+    private fun send(conversation: Conversation, contents: Contents): String {
+        synchronized(cancellationLock) { activeConversation = conversation; stopRequested = false }
+        try {
+            val reply = conversation.sendMessage(contents).toString()
+            synchronized(cancellationLock) { if (stopRequested) throw ProcessingStoppedException() }
+            return reply
+        } catch (e: Exception) {
+            synchronized(cancellationLock) { if (stopRequested) throw ProcessingStoppedException() }
+            throw e
+        } finally { synchronized(cancellationLock) { activeConversation = null } }
+    }
     var modelName = "Not loaded"; private set
     var backendName = "Unavailable"; private set
     var audioEnabled = false; private set
@@ -66,19 +94,51 @@ class GemmaEngine(private val context: Context) {
     private suspend fun turn(system: String, contents: Contents, maxOutput: Int = 1400): Result = withContext(dispatcher) {
         mutex.withLock {
             val e = engine ?: error("Gemma is not ready. Your input has been saved for later.")
+            closeTalk()
             val started = System.nanoTime()
             val config = ConversationConfig(systemInstruction = Contents.of(system),
                 samplerConfig = SamplerConfig(topK = 1, topP = 0.9, temperature = 0.1),
+                thinkingConfig = ThinkingConfig(enableThinking = false, thinkingTokenBudget = 0),
                 maxOutputToken = maxOutput, enableSpeculativeDecoding = backendName == "GPU")
             e.createConversation(config).use { conversation ->
-                Result(conversation.sendMessage(contents).toString().trim(), (System.nanoTime() - started) / 1e9)
+                Result(send(conversation, contents).trim(), (System.nanoTime() - started) / 1e9)
             }
         }
     }
 
-    suspend fun generate(system: String, prompt: String): Result {
+    suspend fun generate(system: String, prompt: String, maxOutput: Int = 1400): Result {
         require(prompt.length <= 26000) { "This source is too long for one pass. Split it or review it manually." }
-        return turn(system, Contents.of(prompt))
+        return turn(system, Contents.of(prompt), maxOutput)
+    }
+
+    @OptIn(ExperimentalApi::class)
+    suspend fun converse(system: String, session: TalkSession): Result = withContext(dispatcher) {
+        mutex.withLock {
+            val e = engine ?: error("Gemma is not ready.")
+            require(session.turns.isNotEmpty() && session.turns.last().role == TalkRole.PATIENT)
+            require(session.turns.sumOf { it.text.length } <= 24000) { "Save this conversation before starting another." }
+            if (talkSessionId != session.id || cachedTurnCount != session.turns.size - 1 || talkConversation == null) {
+                closeTalk()
+                val history = session.turns.dropLast(1).map {
+                    if (it.role == TalkRole.PATIENT) Message.user(it.text) else Message.model(it.text)
+                }
+                talkConversation = e.createConversation(ConversationConfig(systemInstruction = Contents.of(system), initialMessages = history,
+                    samplerConfig = SamplerConfig(topK = 1, topP = 0.9, temperature = 0.1), maxOutputToken = 100,
+                    thinkingConfig = ThinkingConfig(enableThinking = false, thinkingTokenBudget = 0),
+                    enableSpeculativeDecoding = backendName == "GPU"))
+                talkSessionId = session.id
+            }
+            val started = System.nanoTime()
+            try {
+                val reply = send(talkConversation!!, Contents.of(session.turns.last().text)).trim()
+                cachedTurnCount = session.turns.size + 1
+                Result(reply, (System.nanoTime() - started) / 1e9)
+            } catch (e: Exception) { closeTalk(); throw e }
+        }
+    }
+
+    private fun closeTalk() {
+        talkConversation?.close(); talkConversation = null; talkSessionId = null; cachedTurnCount = 0
     }
 
     suspend fun audio(wav: ByteArray, system: String, prompt: String): Result {
@@ -92,7 +152,7 @@ class GemmaEngine(private val context: Context) {
     }
 
     suspend fun unload() = withContext(dispatcher) {
-        mutex.withLock { engine?.close(); engine = null; audioEnabled = false; visionEnabled = false }
+        mutex.withLock { closeTalk(); engine?.close(); engine = null; audioEnabled = false; visionEnabled = false }
     }
 
     suspend fun close() { unload(); dispatcher.close() }

@@ -82,11 +82,28 @@ object StoreCodec {
         json.getAsJsonArray("visits")?.forEach { element ->
             val visit = element.asJsonObject
             if (!visit.has("inputDraftKind")) visit.addProperty("inputDraftKind", "PATIENT_TEXT")
+            if (!visit.has("talks")) visit.add("talks", JsonArray())
+            if (!visit.has("kind")) {
+                val isProfile = visit["title"]?.asString?.startsWith("Health essentials updated") == true || visit.has("replacingProfileId")
+                val isVisit = visit.getAsJsonArray("consents")?.size()?.let { it > 0 } == true ||
+                    visit["stage"]?.asString in setOf("IN_VISIT", "WRAP_UP", "POST_VISIT")
+                visit.addProperty("kind", if (isProfile) "PROFILE" else if (isVisit) "VISIT" else "SYMPTOM")
+            }
+            if (!visit.has("relatedRecordIds")) visit.add("relatedRecordIds", JsonArray())
+            if (!visit.has("briefSummary")) visit.addProperty("briefSummary", "")
+            if (!visit.has("briefSourceFingerprint")) visit.addProperty("briefSourceFingerprint", "")
+            if (!visit.has("briefStatus")) visit.addProperty("briefStatus", if (visit["briefSummary"]?.asString?.isNotBlank() == true) "READY" else "IDLE")
+            visit.getAsJsonArray("sources")?.forEach { item ->
+                val source = item.asJsonObject
+                if (!source.has("summary")) source.addProperty("summary", "")
+                if (!source.has("summaryStatus")) source.addProperty("summaryStatus", "IDLE")
+            }
             visit.getAsJsonArray("facts")?.forEach { defaults(it.asJsonObject) }
             visit.getAsJsonArray("reports")?.forEach { item ->
                 val report = item.asJsonObject
                 if (!report.has("sourceDetails")) report.add("sourceDetails", JsonObject())
                 if (!report.has("zone")) report.addProperty("zone", java.time.ZoneId.systemDefault().id)
+                if (!report.has("communicationSummary")) report.addProperty("communicationSummary", "")
                 listOf("symptoms", "concerns").forEach { key -> report.getAsJsonArray(key)?.forEach { defaults(it.asJsonObject) } }
                 report.getAsJsonArray("records")?.forEach { defaults(it.asJsonObject.getAsJsonObject("fact")) }
             }
@@ -109,6 +126,7 @@ object StoreCodec {
         store.visits.forEach { visit ->
             require(visit.id.matches(Regex("[a-zA-Z0-9_-]{1,100}")))
             requireNotNull(visit.stage); requireNotNull(visit.recording); requireNotNull(visit.title)
+            requireNotNull(visit.kind); requireNotNull(visit.relatedRecordIds); requireNotNull(visit.briefSummary)
             requireNotNull(visit.consents); requireNotNull(visit.questions); requireNotNull(visit.reports)
             requireNotNull(visit.generations); requireNotNull(visit.reminders); requireNotNull(visit.skippedQuestions)
             require(visit.sources.map { it.id }.distinct().size == visit.sources.size)
@@ -120,6 +138,13 @@ object StoreCodec {
                 require(s.startMs == null || (s.startMs >= 0 && (s.endMs ?: 0) >= s.startMs))
             }
             val sourceIds = visit.sources.map { it.id }.toSet()
+            requireNotNull(visit.talks)
+            require(visit.talks.map { it.id }.distinct().size == visit.talks.size)
+            visit.talks.forEach { talk ->
+                require(talk.sourceId in sourceIds)
+                require(talk.turns.map { it.id }.distinct().size == talk.turns.size)
+                talk.turns.forEach { requireNotNull(it.role); require(it.text.isNotBlank() && it.text.length <= 100000) }
+            }
             visit.facts.forEach { f -> validateFact(f); require(f.sourceId in sourceIds) }
             visit.questions.forEach { q ->
                 requireNotNull(q.origin); requireNotNull(q.state); require(q.text.length <= 10000)
@@ -209,7 +234,7 @@ class LocalRepository(context: Context) {
             val raw = o.get("raw_text")?.asString.orEmpty().ifBlank { "Original diary record" }
             val source = Source(id = stableId(id, "original"), kind = SourceKind.LEGACY,
                 text = raw, originalText = item.toString(), status = Processing.IDLE)
-            Visit(id = id, title = "Imported symptom diary", stage = Stage.ARCHIVED,
+            Visit(id = id, title = "Imported symptom diary", kind = RecordKind.SYMPTOM, stage = Stage.ARCHIVED,
                 sources = listOf(source), demo = o.get("demo")?.asBoolean ?: false,
                 createdAt = o.get("created_at")?.asString ?: now())
         }

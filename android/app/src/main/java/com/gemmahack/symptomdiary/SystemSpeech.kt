@@ -13,10 +13,11 @@ class SystemSpeech(private val context: Context) {
     private var generation = 0
     private var installedTags = arrayListOf<String>()
     private var resolvedTag = "en-US"
+    private val resolvedTags = mutableMapOf<String, String>()
     fun available(): Boolean = SpeechRecognizer.isOnDeviceRecognitionAvailable(context)
     private fun intent(tag: String) = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
         putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-        putExtra(RecognizerIntent.EXTRA_LANGUAGE, if (tag == "auto") resolvedTag else tag)
+        putExtra(RecognizerIntent.EXTRA_LANGUAGE, if (tag == "auto") resolvedTag else resolvedTags[tag] ?: if (tag == "en") "en-US" else tag)
         putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
         putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
         if (tag == "auto" && Build.VERSION.SDK_INT >= 34 && installedTags.isNotEmpty()) {
@@ -44,21 +45,24 @@ class SystemSpeech(private val context: Context) {
                     return
                 }
                 val language = tag.substringBefore('-')
-                result(value.installedOnDeviceLanguages.any { it.equals(tag, true) ||
-                    (language == "zh" && it.startsWith("cmn-Hans", true)) || it.substringBefore('-').equals(language, true) })
+                val matched = value.installedOnDeviceLanguages.firstOrNull { it.equals(tag, true) } ?:
+                    value.installedOnDeviceLanguages.firstOrNull { (language == "zh" && it.startsWith("cmn-Hans", true)) ||
+                        it.substringBefore('-').equals(language, true) }
+                if (matched != null) resolvedTags[tag] = matched
+                result(matched != null)
             }
             override fun onError(error: Int) = result(false)
         })
     }
 
-    fun start(tag: String, partial: (String) -> Unit, result: (String) -> Unit, failed: () -> Unit, detected: (String?, Boolean) -> Unit = { _, _ -> }) {
+    fun start(tag: String, partial: (String) -> Unit, result: (String) -> Unit, failed: () -> Unit, detected: (String?, Boolean) -> Unit = { _, _ -> }, ready: () -> Unit = {}) {
         cancel()
         check(available()) { "On-device speech is unavailable." }
         val token = generation
         val local = SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
         recognizer = local
         local.setRecognitionListener(object : RecognitionListener {
-            override fun onReadyForSpeech(params: Bundle?) {}
+            override fun onReadyForSpeech(params: Bundle?) { if (token == generation) ready() }
             override fun onBeginningOfSpeech() {}
             override fun onRmsChanged(rmsdB: Float) {}
             override fun onBufferReceived(buffer: ByteArray?) {}

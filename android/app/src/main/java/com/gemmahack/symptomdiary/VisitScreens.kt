@@ -21,12 +21,9 @@ fun HomeScreen(vm: WithYouViewModel, ui: UiController) {
     Text("Private · Offline · On this phone", color = Muted, fontSize = 13.sp,
         textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(vertical = 15.dp))
     Secondary("Type instead") { vm.newVisit() }
-    val ongoing = vm.data.visits.lastOrNull { it.stage != Stage.ARCHIVED }
-    if (ongoing != null) EntryRow("paper", "Continue your visit", ongoing.title) { vm.selectVisit(ongoing.id) }
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        TextButton(onClick = { vm.newVisit(Screen.CONSENT) }) { Text("Start a visit now", color = Ink) }
-        TextButton(onClick = { vm.navigate(Screen.RECORDS) }) { Text("My records", color = Ink) }
-    }
+    val ongoing = vm.data.visits.lastOrNull { it.kind == RecordKind.SYMPTOM && it.talks.lastOrNull()?.finishedAt == null && it.talks.isNotEmpty() }
+    if (ongoing != null) EntryRow("paper", "Continue", ongoing.title) { vm.selectVisit(ongoing.id) }
+    TextButton(onClick = { vm.navigate(Screen.BRIEF) }) { Text("Prepare for a visit", color = Muted) }
     if (!vm.modelReady) Panel {
         Text(if (vm.modelLoading) "Getting Gemma ready" else "Offline setup", fontWeight = FontWeight.Medium)
         Text(if (vm.modelLoading) "Your local model is loading. You can type and view records while you wait."
@@ -37,28 +34,52 @@ fun HomeScreen(vm: WithYouViewModel, ui: UiController) {
 
 @Composable
 fun PrepareScreen(vm: WithYouViewModel, ui: UiController) {
-    val visit = vm.visit ?: return
-    Title(visit.nextQuestion, "One question at a time. Skip anything you don’t know.")
-    VoiceOrb(vm.listening, if (vm.listening) "Listening · tap to pause" else "Tap to talk", large = false) {
-        if (vm.listening) vm.stopDictation() else ui.withMic { vm.startDictation() }
+    val talk = vm.currentTalk
+    val phase = vm.talkPhase
+    val working = phase in setOf(TalkPhase.STARTING, TalkPhase.THINKING, TalkPhase.FINISHING)
+    val lastReply = talk?.turns?.lastOrNull { it.role == TalkRole.ADVO }?.text
+    var transcript by remember(vm.visitId) { mutableStateOf(false) }
+    Title(if (vm.talkTyped) "Let’s talk" else "I’m here to listen", centered = true)
+    if (!vm.talkTyped) {
+        Spacer(Modifier.height(12.dp))
+        VoiceOrb(phase in setOf(TalkPhase.LISTENING, TalkPhase.SPEAKING),
+            when (phase) {
+                TalkPhase.LISTENING -> "Listening"
+                TalkPhase.SPEAKING -> "Advo is speaking · tap to interrupt"
+                TalkPhase.THINKING -> "Thinking…"
+                TalkPhase.STARTING -> "Getting ready…"
+                TalkPhase.FINISHING -> "Saving your conversation…"
+                else -> "Tap to resume"
+            }) { ui.withMic { vm.interruptTalk() } }
+        if (working) LinearProgressIndicator(Modifier.fillMaxWidth().padding(horizontal = 75.dp), color = Rust, trackColor = Peach)
+        Text(lastReply ?: "Tell me what’s on your mind.", fontSize = 22.sp, lineHeight = 30.sp,
+            textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp))
+        if (vm.talkPartial.isNotBlank()) Text(vm.talkPartial, color = Muted, fontSize = 17.sp, lineHeight = 24.sp,
+            textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+        if (phase == TalkPhase.PAUSED && vm.talkMessage != "Paused") Text(vm.talkMessage, color = Muted,
+            fontSize = 14.sp, lineHeight = 21.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+    } else {
+        talk?.turns?.takeLast(8)?.forEach { turn -> Panel {
+            Text(if (turn.role == TalkRole.PATIENT) "You" else "Advo", color = Muted, fontSize = 12.sp)
+            Text(turn.text, fontSize = 18.sp, lineHeight = 26.sp)
+        } }
+        if (phase == TalkPhase.THINKING) Text("Advo is thinking…", color = Muted)
+        OutlinedTextField(vm.input, vm::editInput, label = { Text("Message Advo") }, minLines = 2, modifier = Modifier.fillMaxWidth())
+        Primary("Send", enabled = vm.input.isNotBlank() && !working) { vm.sendTalkText() }
     }
-    Text(vm.voiceStatus, color = Muted, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
-    OutlinedTextField(vm.input, vm::editInput, label = { Text("Your words") }, placeholder = { Text("Type instead, or edit what you said…") },
-        minLines = 3, modifier = Modifier.fillMaxWidth())
-    Primary("Save answer", enabled = vm.input.isNotBlank() && !vm.listening) { vm.submit() }
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        TextButton(onClick = { vm.skipQuestion() }) { Text("Skip this question", color = Muted) }
-        TextButton(onClick = { vm.navigate(Screen.REVIEW) }) { Text("I’m ready to review", color = Rust) }
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Box(Modifier.weight(1f)) {
+            Secondary(if (vm.talkTyped) "Use voice" else if (phase in setOf(TalkPhase.PAUSED, TalkPhase.IDLE, TalkPhase.FINISHED)) "Resume" else "Pause", enabled = phase != TalkPhase.FINISHING) {
+                if (vm.talkTyped || phase in setOf(TalkPhase.PAUSED, TalkPhase.IDLE, TalkPhase.FINISHED)) ui.withMic { vm.beginTalk() } else vm.pauseTalk()
+            }
+        }
+        Box(Modifier.weight(1f)) { Primary("Done", enabled = phase != TalkPhase.FINISHING) { vm.finishTalk() } }
     }
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        FilterChip(selected = !vm.useGemmaVoice, onClick = { vm.useGemmaVoice = false }, label = { Text("Pixel dictation") }, enabled = !vm.listening)
-        FilterChip(selected = vm.useGemmaVoice, onClick = { vm.useGemmaVoice = true }, label = { Text("Gemma audio") }, enabled = !vm.listening)
+    if (!vm.talkTyped) TextButton(onClick = { vm.typeTalk() }, enabled = phase != TalkPhase.FINISHING) { Text("Type instead", color = Muted) }
+    if (talk?.turns?.isNotEmpty() == true) {
+        TextButton(onClick = { transcript = !transcript }) { Text(if (transcript) "Hide conversation" else "View conversation", color = Muted) }
+        if (transcript) talk.turns.forEach { turn -> Text("${if (turn.role == TalkRole.PATIENT) "You" else "Advo"}: ${turn.text}", fontSize = 15.sp, lineHeight = 23.sp) }
     }
-    if (visit.sources.isNotEmpty()) {
-        SectionLabel("Saved so far")
-        visit.sources.takeLast(3).forEach { source -> SourceRow(vm, source) }
-    }
-    Secondary("Hear the question") { vm.readAloud(visit.nextQuestion) }
 }
 
 @Composable
@@ -173,7 +194,7 @@ fun SourceRow(vm: WithYouViewModel, source: Source) {
             Processing.IDLE -> "Original saved · not processed"
             Processing.QUEUED -> "Saved · waiting for local processing"
             Processing.PROCESSING -> "Processing on this phone"
-            Processing.READY -> "Extracted · patient review still needed"
+            Processing.READY -> "Processed · review your words"
             Processing.FAILED -> "Original saved · retry or edit manually"
         }, if (source.mime == "audio/wav") Lavender else Peach) { vm.openSource(source.id) }
 }
@@ -299,7 +320,8 @@ fun ExtractionScreen(vm: WithYouViewModel, ui: UiController) {
     var index by remember(visit.id) { mutableIntStateOf(0) }
     val facts = visit.currentFacts
     Title("Check one detail", "Compare the wording with its original. You can leave a detail unresolved.")
-    val pending = visit.sources.filter { it.status != Processing.READY }
+    val pending = visit.sources.filter { source -> source.status != Processing.READY ||
+        (source.text.isNotBlank() && visit.facts.none { it.sourceId == source.id }) }
     if (pending.isNotEmpty()) {
         Text("${pending.size} sources still need processing or manual review.", color = Muted)
         Primary("Organize saved sources", enabled = vm.modelReady && !vm.busy) { vm.organizePending() }
@@ -328,7 +350,8 @@ fun ExtractionScreen(vm: WithYouViewModel, ui: UiController) {
         }
     } else Panel { Text("No extracted details yet."); Text("Your originals remain available. Extract them locally or add what you understood.", color = Muted) }
     Secondary("Add a detail manually") { ui.factCategory = Category.ACTION }
-    Primary("See my plan") { vm.navigate(Screen.PLAN) }
+    if (visit.kind == RecordKind.SYMPTOM) Primary("Back to symptom entry") { vm.navigate(Screen.DETAIL) }
+    else Primary("See my plan") { vm.navigate(Screen.PLAN) }
 }
 
 @Composable

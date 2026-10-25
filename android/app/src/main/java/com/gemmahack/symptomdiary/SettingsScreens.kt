@@ -67,10 +67,10 @@ fun ResourcesScreen(vm: WithYouViewModel, ui: UiController) {
     }
     SectionLabel("Model preference")
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        FilterChip(vm.data.settings.modelPreference == "E2B", { vm.settings { it.copy(modelPreference = "E2B") } }, label = { Text("E2B · lighter") }, enabled = !vm.busy && !vm.modelLoading)
-        FilterChip(vm.data.settings.modelPreference == "E4B", { vm.settings { it.copy(modelPreference = "E4B") } }, label = { Text("E4B · larger") }, enabled = !vm.busy && !vm.modelLoading)
+        FilterChip(vm.data.settings.modelPreference == "E2B", { vm.chooseModel("E2B") }, label = { Text("E2B · lighter") }, enabled = !vm.busy && !vm.modelLoading)
+        FilterChip(vm.data.settings.modelPreference == "E4B", { vm.chooseModel("E4B") }, label = { Text("E4B · larger") }, enabled = !vm.busy && !vm.modelLoading)
     }
-    Text("Reload to apply a preference. A model is loaded once and reused; GPU initialization falls back to CPU when needed.", color = Muted, fontSize = 13.sp)
+    Text("Selecting a model applies it immediately. The active file and GPU/CPU backend are shown above. A missing variant falls back to the installed file.", color = Muted, fontSize = 13.sp)
     Primary("Load / reload local model", enabled = !vm.modelLoading && !vm.busy) { vm.reloadModel() }
     Secondary("Import / update a Gemma model", enabled = !vm.modelLoading && !vm.busy) {
         ui.fields("Verify a local model", listOf("Variant · E2B or E4B", "Publisher SHA-256 · 64 hex characters"), listOf(vm.data.settings.modelPreference, ""),

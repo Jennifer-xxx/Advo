@@ -23,24 +23,54 @@ import java.io.File
 
 @Composable
 fun RecordsScreen(vm: WithYouViewModel) {
-    Title("Your health\nstory", "Your health, at a glance.")
-    EntryRow("health", "Medicines", "${vm.data.profile.count { it.status == ProfileStatus.CURRENT && it.fact.category == Category.MEDICINE }} current entries · review your list") { vm.navigate(Screen.HEALTH) }
-    val allergyCount = vm.data.profile.count { it.status == ProfileStatus.CURRENT && it.fact.category == Category.ALLERGY }
-    EntryRow("health", "Allergies", if (allergyCount == 0) "Not recorded / unknown" else "$allergyCount recorded · check reactions") { vm.navigate(Screen.HEALTH) }
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        FilterChip(true, {}, label = { Text("Visits") })
-        FilterChip(false, { vm.navigate(Screen.HEALTH) }, label = { Text("Health") })
+    val records = RecordRules.symptoms(vm.data).sortedByDescending { it.createdAt }
+    Title("Your symptom\nstory", "Every entry stays here, whether or not you have a visit planned.")
+    EntryRow("health", "Health profile", "Medicines, allergies and medical history") { vm.navigate(Screen.HEALTH) }
+    Primary("Prepare for a visit", enabled = records.isNotEmpty()) { vm.navigate(Screen.BRIEF) }
+    if (records.isEmpty()) Panel {
+        Text("Start with how you feel", fontSize = 22.sp, fontWeight = FontWeight.Medium)
+        Text("Talk to Advo whenever something is on your mind. Each conversation becomes one symptom entry.", color = Muted)
+        Secondary("Make a symptom entry") { vm.newVisit() }
     }
-    if (vm.data.visits.isEmpty()) Panel {
-        Text("Your story starts here", fontSize = 22.sp, fontWeight = FontWeight.Medium)
-        Text("Prepare a visit, add a paper or update what you know. No complete health form is needed.", color = Muted)
+    records.forEach { record ->
+        val summary = record.sources.lastOrNull { it.summary.isNotBlank() }?.summary
+        EntryRow("paper", record.title, "${displayDate(record.createdAt)}${if (record.demo) " · demo" else ""}\n" +
+            (summary?.take(150) ?: "${record.talks.sumOf { it.turns.count { turn -> turn.role == TalkRole.PATIENT } }} notes · original words saved")) { vm.selectVisit(record.id) }
     }
-    vm.data.visits.sortedByDescending { it.createdAt }.forEach { visit ->
-        EntryRow("paper", visit.title, "${visit.createdAt.take(10)} · ${visit.stage.name.lowercase().replace('_', ' ')}${if (visit.demo) " · SYNTHETIC DEMO" else ""}\n" +
-            "${visit.sources.size} sources · ${visit.unresolved.size} details need review") { vm.selectVisit(visit.id) }
+    TextButton(onClick = { vm.newVisit(Screen.SCAN) }) { Text("Add a paper or photo", color = Muted) }
+}
+
+@Composable
+fun VisitsScreen(vm: WithYouViewModel) {
+    Title("Your visits", "Visit recordings and appointment briefs live here, separate from your symptom history.")
+    Primary("Start visit recording") { vm.newVisit(Screen.CONSENT) }
+    Secondary("Prepare an appointment brief") { vm.navigate(Screen.BRIEF) }
+    val visits = RecordRules.visits(vm.data).sortedByDescending { it.createdAt }
+    if (visits.isEmpty()) Panel { Text("No visits yet", fontSize = 21.sp); Text("You can keep recording symptoms in your Library between appointments.", color = Muted) }
+    visits.forEach { visit -> EntryRow(if (visit.recordedMs > 0) "mic" else "paper", visit.title,
+        "${displayDate(visit.createdAt)} · ${if (visit.isCapturing) "Recording active" else if (visit.recordedMs > 0) "${visit.recordedMs / 1000} seconds recorded" else "Appointment brief"}") { vm.selectVisit(visit.id) } }
+}
+
+@Composable
+fun BriefSelectionScreen(vm: WithYouViewModel) {
+    val records = RecordRules.symptoms(vm.data).sortedByDescending { it.createdAt }
+    val selected = remember { mutableStateListOf<String>().apply { addAll(records.map { it.id }) } }
+    Title("Prepare for\nyour visit", "Choose the symptom entries you want your doctor to see. Advo will summarize them together.")
+    if (records.isEmpty()) {
+        Text("Your Library has no symptom entries yet.", color = Muted)
+        Primary("Make a symptom entry") { vm.newVisit() }
+        return
     }
-    Primary("Add a record") { vm.newVisit(Screen.SCAN) }
-    Secondary("Update by voice or text") { vm.newVisit() }
+    Row {
+        TextButton(onClick = { selected.clear(); selected.addAll(records.map { it.id }) }) { Text("Select all", color = Muted) }
+        TextButton(onClick = { selected.clear() }) { Text("Clear", color = Muted) }
+    }
+    records.forEach { record -> Panel {
+        CheckRow(record.title, record.id in selected, displayDate(record.createdAt)) { include ->
+            if (include) { if (record.id !in selected) selected.add(record.id) } else selected.remove(record.id)
+        }
+    } }
+    Primary("Create brief · ${selected.size} entries", enabled = selected.isNotEmpty() && !vm.busy) { vm.prepareFromRecords(selected.toSet()) }
 }
 
 @Composable
@@ -89,10 +119,19 @@ fun HealthScreen(vm: WithYouViewModel, ui: UiController) {
 @Composable
 fun DetailScreen(vm: WithYouViewModel, ui: UiController) {
     val visit = vm.visit ?: return
+    if (visit.kind != RecordKind.VISIT) { SymptomDetailScreen(vm, ui); return }
+    var tools by remember(visit.id) { mutableStateOf(false) }
     if (visit.demo) Flag("Synthetic demonstration · no real patient")
     Title(visit.title, "${visit.createdAt.take(10)} · ${visit.stage.name.lowercase().replace('_', ' ')}")
     if (visit.unresolved.isNotEmpty()) Flag("${visit.unresolved.size} details remain unresolved or unreviewed")
     if (visit.isCapturing) EntryRow("mic", "Recording is active", "${visit.recordedMs / 1000} seconds saved. Return to pause or stop.") { vm.navigate(Screen.LIVE) }
+    Primary(if (visit.isCapturing) "Return to recording" else "Start visit recording") {
+        vm.navigate(if (visit.isCapturing) Screen.LIVE else Screen.CONSENT)
+    }
+    if (visit.reports.isNotEmpty()) Secondary("Open appointment brief") { vm.navigate(Screen.REPORT) }
+    if (visit.summary.isNotBlank()) Panel { Text("Your visit summary", fontWeight = FontWeight.Medium); Text(visit.summary) }
+    TextButton(onClick = { tools = !tools }) { Text(if (tools) "Hide visit tools" else "Visit tools & saved sources", color = Muted) }
+    if (tools) {
     EntryRow("paper", "Prepare & review", "Symptoms, relevant records and your questions") { vm.navigate(Screen.REVIEW) }
     if (visit.reports.isNotEmpty()) EntryRow("paper", "Visit reports", "${visit.reports.size} immutable versions · English doctor view") { vm.navigate(Screen.REPORT); vm.renderReport() }
     EntryRow("mic", "During your visit", if (visit.recording == Recording.NOT_STARTED) "Start with consent, or use manual notes" else "${visit.recording.name.lowercase()} · ${visit.recordedMs / 1000} seconds saved") {
@@ -126,6 +165,45 @@ fun DetailScreen(vm: WithYouViewModel, ui: UiController) {
     Secondary("Delete recording only", enabled = !visit.isCapturing) { ui.confirm("Permanently delete audio?", "This deletes all saved audio segments for this visit. The transcript, summary, paper sources and reviewed details remain. There is no undo.", "Delete audio") { vm.deleteAudio() } }
     if (visit.summary.isNotBlank()) Secondary("Delete explanation only") { ui.confirm("Delete the explanation?", "Your original sources, extracted details and reports remain.", "Delete explanation") { vm.deleteSummary() } }
     Secondary("Delete visit", enabled = !visit.isCapturing && !vm.busy) { ui.confirm("Permanently delete this visit?", "The visit, reports, notes and attachments will be removed. Sources used by your health profile are retained separately so profile entries keep their provenance. Local exported files and backups are not deleted.", "Delete visit") { vm.deleteVisit() } }
+    }
+}
+
+@Composable
+fun SymptomDetailScreen(vm: WithYouViewModel, ui: UiController) {
+    val record = vm.visit ?: return
+    var transcript by remember(record.id) { mutableStateOf(false) }
+    var more by remember(record.id) { mutableStateOf(false) }
+    val dictations = record.sources.filter { it.parentId == null && it.text.isNotBlank() }
+    Title(record.title, displayDate(record.createdAt))
+    dictations.forEach { source -> Panel {
+        if (source.summary.isNotBlank()) {
+            Text("Your summary", color = Muted, fontSize = 13.sp)
+            Text(source.summary, fontSize = 19.sp, lineHeight = 28.sp)
+            Text("Draft · based on your words", color = Muted, fontSize = 12.sp)
+        } else if (source.summaryStatus in setOf(Processing.QUEUED, Processing.PROCESSING) && vm.busy) {
+            LinearProgressIndicator(Modifier.fillMaxWidth(), color = Rust, trackColor = Peach)
+            Text("Your dictation is saved. Advo is summarizing the conversation…", color = Muted)
+        } else {
+            Text(source.text, fontSize = 18.sp, lineHeight = 26.sp)
+            Text(if (source.summaryStatus == Processing.FAILED) "Summary unavailable. Your full dictation is safe." else "Original dictation · saved on this phone", color = Muted, fontSize = 13.sp)
+            if (!vm.busy && vm.modelReady) TextButton(onClick = { vm.summarizeSource(source.id) }) { Text("Summarize", color = Rust) }
+        }
+    } }
+    val unfinished = record.talks.lastOrNull()?.finishedAt == null && record.talks.isNotEmpty()
+    if (unfinished) Primary("Continue conversation") { vm.selectVisit(record.id, Screen.PREPARE) }
+    else Primary("Use in an appointment brief", enabled = !vm.busy) { vm.navigate(Screen.BRIEF) }
+    TextButton(onClick = { transcript = !transcript }) { Text(if (transcript) "Hide full dictation" else "Full dictation", color = Muted) }
+    if (transcript) dictations.forEach { Panel { Text(it.text, fontSize = 17.sp, lineHeight = 25.sp) } }
+    TextButton(onClick = { more = !more }) { Text(if (more) "Less" else "More", color = Muted) }
+    if (more) {
+        Secondary(if (vm.speaking) "Stop reading" else "Read summary aloud") { vm.readAloud(dictations.joinToString("\n") { it.summary.ifBlank { it.text } }) }
+        record.sources.forEach { SourceRow(vm, it) }
+        Secondary("Review extracted details") { vm.navigate(Screen.EXTRACTION) }
+        Secondary("Add a paper or photo") { vm.navigate(Screen.SCAN) }
+        Secondary("Delete this symptom entry", enabled = !vm.busy) {
+            ui.confirm("Delete this symptom entry?", "This removes this entry and its attachments. Existing appointment report snapshots and health-profile provenance remain.", "Delete entry") { vm.deleteVisit() }
+        }
+    }
 }
 
 @Composable
@@ -133,12 +211,23 @@ fun ReportScreen(vm: WithYouViewModel, ui: UiController) {
     val visit = vm.visit ?: return
     val context = LocalContext.current
     Title("Ready for\nyour visit", "English doctor view · patient draft")
+    if (visit.briefStatus == Processing.PROCESSING) {
+        LinearProgressIndicator(Modifier.fillMaxWidth(), color = Rust, trackColor = Peach)
+        Text(vm.briefProgress.ifBlank { "Preparing your selected history…" }, color = Muted)
+    }
+    if (visit.briefStatus == Processing.FAILED) Panel {
+        Text("AI summary needs another try", fontWeight = FontWeight.Medium)
+        Text(visit.briefError ?: "Your originals are preserved.", color = Muted)
+        Secondary("Retry AI summary", enabled = !vm.busy && !vm.modelLoading) { vm.retryBrief() }
+        if (!vm.modelReady) TextButton(onClick = { vm.navigate(Screen.RESOURCES) }) { Text("Offline resources", color = Rust) }
+    }
     if (visit.reports.isEmpty()) {
         Text("Create your report from the current details. You can keep unknowns and unresolved items.", color = Muted)
-        Primary("Create report") { vm.createReport() }
+        if (visit.briefStatus != Processing.PROCESSING) Primary("Create report from original wording", enabled = !vm.busy) { vm.createReport() }
         return
     }
     val report = if (vm.reportIndex < 0) visit.reports.last() else visit.reports[vm.reportIndex.coerceAtMost(visit.reports.lastIndex)]
+    if (report.recordCount > 0) Text("Based on ${report.recordCount} selected symptom entries", color = Muted, fontSize = 14.sp)
     LaunchedEffect(report.id) { vm.renderReport(vm.reportIndex) }
     Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
         visit.reports.forEachIndexed { index, item -> FilterChip(item.id == report.id, { vm.reportIndex = index }, label = { Text("v${item.version}") }) }
@@ -146,15 +235,18 @@ fun ReportScreen(vm: WithYouViewModel, ui: UiController) {
     Flag(report.reviewLabel)
     vm.reportFile?.let { PdfPreview(it) }
     Text("US Letter · selectable text · pinch to zoom. Long reports use clearly marked continuation pages.", color = Muted, fontSize = 12.sp)
-    Primary("Share PDF", enabled = vm.reportFile != null) {
-        ui.confirm("Share this report?", "Only report v${report.version} will be handed to the app you choose. Sharing destinations may use their own network access. The local report remains if you cancel.", "Open share sheet") {
-            try { ReportExport.share(context, vm.reportFile!!) } catch (_: Exception) { vm.notice = "No sharing app is available. You can save the PDF locally." }
+    var exporting by remember { mutableStateOf(false) }
+    Box {
+        Secondary("Export brief", enabled = vm.reportFile != null) { exporting = true }
+        DropdownMenu(expanded = exporting, onDismissRequest = { exporting = false }) {
+            DropdownMenuItem(text = { Text("Share PDF") }, onClick = { exporting = false; try { ReportExport.share(context, vm.reportFile!!) } catch (_: Exception) { vm.notice = "Could not open sharing. You can save the PDF instead." } })
+            DropdownMenuItem(text = { Text("Save on this phone") }, onClick = { exporting = false; ui.savePdf() })
+            DropdownMenuItem(text = { Text("Print") }, onClick = { exporting = false; try { ReportExport.print(context, vm.reportFile!!) } catch (_: Exception) { vm.notice = "Printing could not start." } })
+            DropdownMenuItem(text = { Text("Update from current records") }, onClick = { exporting = false; vm.createReport() })
         }
     }
-    Secondary("Save PDF on this device", enabled = vm.reportFile != null) { ui.savePdf() }
-    Secondary("Print", enabled = vm.reportFile != null) { try { ReportExport.print(context, vm.reportFile!!) } catch (_: Exception) { vm.notice = "Printing could not start. Save the PDF and print later." } }
-    Secondary("Create a new version from current details") { vm.createReport() }
-    Primary("Start visit") { vm.navigate(Screen.CONSENT) }
+    Primary("Start visit recording") { vm.navigate(Screen.CONSENT) }
+
 }
 
 @Composable

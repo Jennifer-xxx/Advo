@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import java.io.File
+import kotlinx.coroutines.delay
 
 data class FormRequest(val title: String, val labels: List<String>, val initial: List<String>, val button: String,
     val description: String, val password: Boolean, val done: (List<String>) -> Unit)
@@ -68,6 +69,14 @@ fun App(vm: WithYouViewModel) {
     val context = LocalContext.current
     val activity = LocalActivity.current ?: return
     val scroll = rememberScrollState()
+    var processingSeconds by remember { mutableLongStateOf(0) }
+    LaunchedEffect(vm.busy, vm.processingStartedAt) {
+        processingSeconds = 0
+        while (vm.busy) {
+            processingSeconds = ((android.os.SystemClock.elapsedRealtime() - vm.processingStartedAt) / 1000).coerceAtLeast(0)
+            delay(1000)
+        }
+    }
     LaunchedEffect(vm.screen, vm.visitId) { scroll.scrollTo(0) }
     val ui = remember(vm) { UiController(vm) }
     var afterMic by remember { mutableStateOf<(() -> Unit)?>(null) }
@@ -156,21 +165,25 @@ fun App(vm: WithYouViewModel) {
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                     if (vm.screen != Screen.HOME) IconButton(onClick = { vm.back() }, modifier = Modifier.semantics { contentDescription = "Back" }) { Glyph("back") }
                     else Box(Modifier.padding(9.dp)) { androidx.compose.foundation.Canvas(Modifier.size(15.dp)) { drawCircle(Color(0xffffb78e)) } }
-                    Text(if (vm.screen in setOf(Screen.HOME, Screen.RECORDS)) "Advo" else vm.screen.label,
+                    Text(if (vm.screen == Screen.HOME) "Advo" else if (vm.screen == Screen.DETAIL && vm.visit?.kind == RecordKind.SYMPTOM) "Symptom entry" else vm.screen.label,
                         modifier = Modifier.weight(1f), fontSize = 17.sp, fontWeight = FontWeight.Medium)
-                    TextButton(onClick = { vm.navigate(Screen.LANGUAGE) }) { Text("EN", color = Ink) }
-                    if (vm.screen == Screen.HOME) IconButton(onClick = { vm.navigate(Screen.SETTINGS) }, modifier = Modifier.semantics { contentDescription = "Settings" }) { Glyph("settings") }
+                    if (vm.screen in setOf(Screen.HOME, Screen.RECORDS, Screen.HEALTH, Screen.VISITS)) IconButton(onClick = { vm.navigate(Screen.SETTINGS) }, modifier = Modifier.semantics { contentDescription = "Settings" }) { Glyph("settings") }
                 }
-                if (vm.busy) {
+                if (vm.busy && vm.screen != Screen.PREPARE) {
                     LinearProgressIndicator(Modifier.fillMaxWidth(), color = Rust, trackColor = Peach)
-                    Text("Processing on this phone · originals saved", fontSize = 12.sp, color = Muted,
-                        modifier = Modifier.padding(20.dp, 6.dp))
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text("${vm.processingLabel.ifBlank { "Processing locally" }} · ${processingSeconds}s", fontSize = 12.sp, color = Muted,
+                            modifier = Modifier.weight(1f).padding(vertical = 6.dp))
+                        if (vm.canStopProcessing) TextButton(onClick = { vm.stopProcessing() }) { Text("Stop", color = Rust) }
+                    }
+                    if (processingSeconds >= 30) Text("Your originals are saved. You can stop and retry later.", fontSize = 12.sp,
+                        color = Muted, modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp))
                 }
             }
         }, bottomBar = {
-            if (vm.screen in setOf(Screen.HOME, Screen.RECORDS, Screen.HEALTH, Screen.SETTINGS)) {
+            if (vm.screen in setOf(Screen.HOME, Screen.RECORDS, Screen.HEALTH, Screen.SETTINGS, Screen.VISITS)) {
                 NavigationBar(containerColor = Cream, tonalElevation = 0.dp) {
-                    listOf(Triple("Talk", "mic", Screen.HOME), Triple("My records", "folder", Screen.RECORDS), Triple("Settings", "settings", Screen.SETTINGS)).forEach { (label, icon, target) ->
+                    listOf(Triple("Talk", "mic", Screen.HOME), Triple("Library", "folder", Screen.RECORDS), Triple("Visits", "paper", Screen.VISITS)).forEach { (label, icon, target) ->
                         NavigationBarItem(selected = vm.screen == target || target == Screen.RECORDS && vm.screen == Screen.HEALTH,
                             onClick = { vm.navigate(target) }, icon = { Glyph(icon) }, label = { Text(label) },
                             colors = NavigationBarItemDefaults.colors(indicatorColor = Peach))
@@ -196,6 +209,8 @@ fun App(vm: WithYouViewModel) {
                     Screen.DOCTOR -> DoctorScreen(vm)
                     Screen.SOURCE -> SourceScreen(vm, ui)
                     Screen.RECORDS -> RecordsScreen(vm)
+                    Screen.VISITS -> VisitsScreen(vm)
+                    Screen.BRIEF -> BriefSelectionScreen(vm)
                     Screen.HEALTH -> HealthScreen(vm, ui)
                     Screen.DETAIL -> DetailScreen(vm, ui)
                     Screen.SETTINGS -> SettingsScreen(vm, ui)

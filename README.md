@@ -12,6 +12,17 @@ Advo helps patients speak clearly, connect the dots, and keep their whole health
 - **During:** With consent, Advo listens, tracks unanswered questions and surfaces questions about new prescriptions and the patient’s saved records. It never diagnoses. The current demo supports exact reviewed medicine/allergy-name comparisons; comprehensive medication-interaction checking requires a validated local reference database and is explicitly unavailable.
 - **After:** Each visit stays in a personal health Library: medications, allergies, appointments, source papers and reports. Patients can explicitly export and share a report with a caregiver; nothing is sent automatically.
 
+## A simple everyday flow
+
+- **Talk:** tap once and speak naturally. Advo acknowledges your words, asks one short follow-up, reads it aloud with an installed offline voice, and listens again automatically. Pause and Done are the main controls; Type instead opens a chat composer.
+- **Library:** each conversation is saved as one long-term symptom entry with the complete patient dictation and a draft summary. Assistant questions are stored separately and never treated as patient evidence. A symptom entry has no required appointment stages.
+- **Prepare for a visit:** select the symptom entries you want to include. Advo combines their dated history into a concise appointment brief and generates a local PDF. Share, save and print live under one Export brief menu.
+- **Visits:** a separate page contains appointment briefs and actual visit recordings, with a direct Start visit recording button. Recording still requires consent from everyone present.
+
+After Done, Advo performs one summary pass. Detailed structured extraction remains available when requested, rather than silently running after every conversation. Routine inference explicitly disables thinking, and spoken replies reuse the conversation context. Progress names the actual operation, shows elapsed time and offers Stop for active native generation. Interrupted jobs become retryable rather than displaying a permanent spinner.
+
+Brief generation sends compact patient text instead of duplicated fact metadata. Long histories are summarized in bounded batches. Numeric validation accepts equivalent forms such as `5/10` and `5 out of 10`, while rejecting new measurements or changed dose units. The app waits for a model already loading and shows a specific failure reason plus Retry AI summary if generation fails.
+
 ## Techniques used
 
 - **Gemma 4 + LiteRT-LM:** one local multimodal model for audio transcription, document reading, grounded extraction, follow-up questions, translation and plain-language drafts.
@@ -27,7 +38,7 @@ Built for the Gemma Hardware Hackathon **Mobile AI** track, targeting **Google P
 
 | Journey | Working flow |
 | --- | --- |
-| Before | Tap to talk or type; one question at a time; skip, pause and correct; source-linked symptom, medicine, allergy and history drafts; choose and order questions; review; create an English, selectable-text US Letter PDF; preview, save, share or print. Reports keep immutable versions. |
+| Before | Keep symptom entries over time; select entries when preparing an appointment brief; source-linked symptom, medicine, allergy and history drafts; choose and order questions; review; create an English, selectable-text US Letter PDF; preview, save, share or print. Reports keep immutable versions. |
 | During | Per-recording **Everyone agreed** starts unchecked. Record only after consent and microphone permission, or continue with manual notes. Pause/resume/stop/withdraw; encrypted audio segments; genuine queued local transcription and quiet contextual question suggestions. **Show doctor** is a large English view on this phone. |
 | Before leaving | Review discussion, medicine changes, next steps and unanswered questions individually. Patient review and a patient's statement that they checked with the doctor are distinct. Finish with unresolved details still flagged. |
 | After | Capture or import local images and multipage PDFs; retain originals; rotate using photo orientation, zoom, crop a copy and retake; local Gemma document transcription and extraction; compare source wording; correct or leave unresolved; review a plain-English explanation and actions. Choose what to archive and which reviewed facts to add to the current profile. |
@@ -66,7 +77,7 @@ adb push /path/to/gemma-4-E4B-it.litertlm /sdcard/Android/data/com.gemmahack.sym
 adb shell am start -n com.gemmahack.symptomdiary/.MainActivity
 ```
 
-Alternatively copy the model into Downloads and use **Settings → Offline resources → Import / update**, with the publisher's SHA-256. E2B is preferred for its smaller footprint; E4B can be selected for a larger model. The other variant is used if the preferred file is absent. Sideloaded models without an app-verified publisher checksum are identified explicitly.
+Alternatively copy the model into Downloads and use **Settings → Offline resources → Import / update**, with the publisher's SHA-256. E2B is the default smaller-footprint option; E4B remains selectable. Selection applies immediately; the active model file and backend are displayed. Actual speed must be measured on the device, with the same workload. The other variant is used if the preferred file is absent. Sideloaded models without an app-verified publisher checksum are identified explicitly.
 
 Before the demo, provision the desired Pixel offline speech pack and an offline English TTS voice in Android's settings. Advo will not download either. Then enable airplane mode and use **Settings → Open a synthetic demo visit**. Demo content is labeled and never replaces other visits.
 

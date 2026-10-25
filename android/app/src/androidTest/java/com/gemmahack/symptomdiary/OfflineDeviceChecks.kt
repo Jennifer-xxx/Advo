@@ -142,6 +142,40 @@ class OfflineDeviceChecks : Instrumentation() {
                 } finally { engine.close() }
             } }
         }
+        if (arguments.getString("conversation") == "true") {
+            test("cached two-turn conversation, whole dictation summary and longitudinal brief") { runBlocking {
+                val engine = GemmaEngine(targetContext)
+                try {
+                    val load = engine.load("E2B")
+                    val intelligence = VisitIntelligence(targetContext, engine)
+                    val session = TalkSession(turns = listOf(TalkTurn(role = TalkRole.PATIENT, text = "I have had a headache for five days. It comes back in the afternoon.")))
+                    val first = intelligence.reply(session)
+                    check(first.text.isNotBlank())
+                    val continued = session.copy(turns = session.turns + TalkTurn(role = TalkRole.ADVO, text = first.text) +
+                        TalkTurn(role = TalkRole.PATIENT, text = "It is about 4 out of 10. No fever. I want to ask whether my poor sleep could be related."))
+                    val second = intelligence.reply(continued)
+                    check(second.text.isNotBlank())
+                    val dictation = source.copy(text = continued.turns.filter { it.role == TalkRole.PATIENT }.joinToString("\n\n") { it.text })
+                    val summary = intelligence.summarizeDictation(dictation)
+                    check(summary.text.isNotBlank() && !dictation.text.contains(first.text))
+                    val record = visit.copy(kind = RecordKind.SYMPTOM, sources = listOf(dictation))
+                    val later = record.copy(id = "later-symptom", createdAt = "2026-10-24T10:00:00Z",
+                        sources = listOf(source.copy(id = "later-source", text = "The headache came back in the afternoon. Rest helped.")))
+                    val brief = intelligence.longitudinalBrief(listOf(record, later))
+                    check(brief.text.isNotBlank())
+                    var offlineVoice = false
+                    lateinit var speaker: Speaker
+                    runOnMainSync { speaker = Speaker(targetContext) }
+                    repeat(30) { if (!speaker.initialized) Thread.sleep(100) }
+                    runOnMainSync { offlineVoice = speaker.offlineAvailable(); speaker.close() }
+                    val permissions = targetContext.packageManager.getPackageInfo(targetContext.packageName,
+                        android.content.pm.PackageManager.GET_PERMISSIONS).requestedPermissions.orEmpty()
+                    check("android.permission.INTERNET" !in permissions)
+                    sendStatus(0, Bundle().apply { putString("stream", "CONVERSATION ${engine.modelName} ${engine.backendName}; load %.1fs; reply %.1fs; cached reply %.1fs; summary %.1fs; combined brief %.1fs; offline voice $offlineVoice\n".format(
+                        load, first.seconds, second.seconds, summary.seconds, brief.seconds)) })
+                } finally { engine.close() }
+            } }
+        }
         password.fill('\u0000'); backupFile.delete(); base.deleteRecursively()
         finish(if (failures.isEmpty()) Activity.RESULT_OK else Activity.RESULT_CANCELED, Bundle().apply {
             putString("stream", "\n$passed checks passed; ${failures.size} failed.\n" + failures.joinToString("\n"))

@@ -14,6 +14,7 @@ fun stableId(vararg parts: String): String = MessageDigest.getInstance("SHA-256"
     .digest(parts.joinToString("\u0000").toByteArray()).joinToString("") { "%02x".format(it) }.take(32)
 
 enum class Stage { PREPARING, READY, IN_VISIT, WRAP_UP, POST_VISIT, ARCHIVED }
+enum class RecordKind { SYMPTOM, VISIT, PROFILE }
 enum class Processing { IDLE, QUEUED, PROCESSING, READY, FAILED }
 enum class Review { DRAFT, PATIENT_REVIEWED, UNRESOLVED }
 enum class Recording { NOT_STARTED, RECORDING, PAUSED, STOPPED, INTERRUPTED }
@@ -37,6 +38,7 @@ data class Source(
     val endMs: Long? = null, val status: Processing = Processing.IDLE,
     val speaker: String = "Unknown speaker", val editedAt: String? = null,
     val parentId: String? = null, val error: String? = null,
+    val summary: String = "", val summaryStatus: Processing = Processing.IDLE,
 ) {
     val label: String get() = when (kind) {
         SourceKind.PATIENT_TEXT -> "Patient's words"
@@ -95,6 +97,7 @@ data class ReportSnapshot(
     val generations: List<Generation>, val reviewLabel: String,
     val categoryStates: Map<String, KnowledgeState> = emptyMap(),
     val sourceDetails: Map<String, String> = emptyMap(), val zone: String = ZoneId.systemDefault().id,
+    val communicationSummary: String = "", val recordCount: Int = 0,
 )
 
 data class ActionReminder(val id: String, val factId: String, val at: String, val zone: String)
@@ -115,6 +118,11 @@ data class Visit(
     val inputDraft: String = "", val savedSourceIds: List<String> = emptyList(), val savedFactIds: List<String> = emptyList(),
     val replacingProfileId: String? = null,
     val inputDraftKind: SourceKind = SourceKind.PATIENT_TEXT,
+    val talks: List<TalkSession> = emptyList(),
+    val kind: RecordKind = RecordKind.VISIT, val relatedRecordIds: List<String> = emptyList(),
+    val briefSummary: String = "",
+    val briefSourceFingerprint: String = "",
+    val briefStatus: Processing = Processing.IDLE, val briefError: String? = null,
 ) {
     val currentFacts: List<Fact> get() = facts.filter { !it.superseded }
     val unresolved: List<Fact> get() = currentFacts.filter { it.needsReview }
@@ -165,8 +173,13 @@ object VisitRules {
     fun recover(visit: Visit): Visit = visit.copy(
         recording = if (visit.isCapturing) Recording.INTERRUPTED else visit.recording,
         consents = visit.consents.map { if (it.active) it.copy(endedAt = now()) else it },
-        sources = visit.sources.map { if (it.status == Processing.PROCESSING) it.copy(
-            status = Processing.FAILED, error = "Processing was interrupted. Retry when ready.") else it },
+        sources = visit.sources.map { source ->
+            val restored = if (source.status == Processing.PROCESSING) source.copy(status = Processing.FAILED,
+                error = "Processing was interrupted. Retry when ready.") else source
+            if (restored.summaryStatus == Processing.PROCESSING) restored.copy(summaryStatus = Processing.FAILED) else restored
+        },
+        briefStatus = if (visit.briefStatus == Processing.PROCESSING) Processing.FAILED else visit.briefStatus,
+        briefError = if (visit.briefStatus == Processing.PROCESSING) "Brief generation was interrupted. Your records are safe; retry when ready." else visit.briefError,
     )
 
     fun mergeFacts(old: List<Fact>, incoming: List<Fact>): List<Fact> {
