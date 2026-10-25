@@ -4,164 +4,84 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
-import android.speech.ModelDownloadListener
-import android.speech.RecognitionListener
-import android.speech.RecognitionSupport
-import android.speech.RecognitionSupportCallback
-import android.speech.RecognizerIntent
-import android.speech.SpeechRecognizer
+import android.speech.*
 
-/**
- * The phone's on-device speech recognizer (Android 12+). On Pixel this is Google's on-device speech
- * service. It runs fully offline once the language pack is installed. Gemma still does all the
- * understanding: extraction, follow-ups and the report. Must be called on the main thread.
- *
- * Language packs: we ask the service which languages are installed / downloading / supported
- * (Android 13+), pick the right tag (Mandarin is often "cmn-Hans-CN", not "zh-CN"), and download
- * with progress (Android 14+).
- */
+/** Pixel's installed on-device recognizer only. Never create the network-capable recognizer or request downloads. */
 class SystemSpeech(private val context: Context) {
-    enum class Pack { INSTALLED, DOWNLOADING, DOWNLOADABLE, UNSUPPORTED, UNKNOWN }
-
     private var recognizer: SpeechRecognizer? = null
-    private var helper: SpeechRecognizer? = null
-    private val resolvedTag = mutableMapOf<String, String>()
-
-    fun available(): Boolean = runCatching { SpeechRecognizer.isOnDeviceRecognitionAvailable(context) }.getOrDefault(false)
-
-    private fun defaultTag(lang: String) = if (lang == "zh") "zh-CN" else "en-US"
-
-    fun tagFor(lang: String): String = resolvedTag[lang] ?: defaultTag(lang)
-
+    private var support: SpeechRecognizer? = null
+    private var generation = 0
+    private var installedTags = arrayListOf<String>()
+    private var resolvedTag = "en-US"
+    fun available(): Boolean = SpeechRecognizer.isOnDeviceRecognitionAvailable(context)
     private fun intent(tag: String) = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
         putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-        putExtra(RecognizerIntent.EXTRA_LANGUAGE, tag)
+        putExtra(RecognizerIntent.EXTRA_LANGUAGE, if (tag == "auto") resolvedTag else tag)
         putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
         putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
+        if (tag == "auto" && Build.VERSION.SDK_INT >= 34 && installedTags.isNotEmpty()) {
+            putExtra(RecognizerIntent.EXTRA_ENABLE_LANGUAGE_DETECTION, true)
+            putStringArrayListExtra(RecognizerIntent.EXTRA_LANGUAGE_DETECTION_ALLOWED_LANGUAGES, installedTags)
+            putExtra(RecognizerIntent.EXTRA_ENABLE_LANGUAGE_SWITCH, RecognizerIntent.LANGUAGE_SWITCH_BALANCED)
+            putStringArrayListExtra(RecognizerIntent.EXTRA_LANGUAGE_SWITCH_ALLOWED_LANGUAGES, installedTags)
+        }
     }
 
-    /** Picks the tag for our language from what the service offers. Mandarin, Simplified script only. */
-    private fun pick(lang: String, tags: List<String>): String? {
-        val lower = tags.map { it.lowercase() }
-        val preferred = if (lang == "zh") listOf("cmn-hans-cn", "zh-cn", "cmn-cn", "zh-hans-cn", "zh") else listOf("en-us", "en-gb", "en")
-        preferred.forEach { p -> lower.indexOf(p).takeIf { it >= 0 }?.let { return tags[it] } }
-        val idx = lower.indexOfFirst { t ->
-            if (lang == "zh") (t.startsWith("cmn") || t.startsWith("zh")) && listOf("hant", "tw", "hk", "yue").none { it in t }
-            else t.startsWith("en")
-        }
-        return if (idx >= 0) tags[idx] else null
-    }
-
-    /** Reports whether the pack for [lang] is installed, downloading, downloadable or unsupported. */
-    fun checkPack(lang: String, onResult: (Pack, String) -> Unit) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
-            onResult(Pack.UNKNOWN, tagFor(lang))
-            return
-        }
-        helper?.destroy()
-        val r = SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
-        helper = r
-        r.checkRecognitionSupport(intent(defaultTag(lang)), context.mainExecutor, object : RecognitionSupportCallback {
-            override fun onSupportResult(support: RecognitionSupport) {
-                val installed = pick(lang, support.installedOnDeviceLanguages)
-                val pending = pick(lang, support.pendingOnDeviceLanguages)
-                val supported = pick(lang, support.supportedOnDeviceLanguages)
-                val (state, tag) = when {
-                    installed != null -> Pack.INSTALLED to installed
-                    pending != null -> Pack.DOWNLOADING to pending
-                    supported != null -> Pack.DOWNLOADABLE to supported
-                    else -> Pack.UNSUPPORTED to defaultTag(lang)
+    fun check(tag: String, result: (Boolean) -> Unit) {
+        if (!available()) { result(false); return }
+        if (Build.VERSION.SDK_INT < 33) { result(false); return }
+        support?.destroy()
+        val helper = SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
+        support = helper
+        helper.checkRecognitionSupport(intent(tag), context.mainExecutor, object : RecognitionSupportCallback {
+            override fun onSupportResult(value: RecognitionSupport) {
+                installedTags = ArrayList(value.installedOnDeviceLanguages.filter { language ->
+                    language.startsWith("en", true) || language.startsWith("es", true) || language.equals("zh-CN", true) || language.startsWith("cmn-Hans", true)
+                })
+                if (tag == "auto") {
+                    resolvedTag = installedTags.firstOrNull { it.startsWith("en", true) } ?: installedTags.firstOrNull() ?: "en-US"
+                    result(Build.VERSION.SDK_INT >= 34 && installedTags.isNotEmpty())
+                    return
                 }
-                resolvedTag[lang] = tag
-                onResult(state, tag)
+                val language = tag.substringBefore('-')
+                result(value.installedOnDeviceLanguages.any { it.equals(tag, true) ||
+                    (language == "zh" && it.startsWith("cmn-Hans", true)) || it.substringBefore('-').equals(language, true) })
             }
-
-            override fun onError(error: Int) {
-                onResult(Pack.UNKNOWN, tagFor(lang))
-            }
+            override fun onError(error: Int) = result(false)
         })
     }
 
-    /**
-     * Downloads the pack for [lang]. Android 14+ reports progress; Android 13 only schedules it.
-     * The download is done by the system speech service, not by this app (which has no network access).
-     */
-    fun downloadPack(
-        lang: String,
-        progress: (Int) -> Unit,
-        done: () -> Unit,
-        scheduled: () -> Unit,
-        failed: (Int) -> Unit,
-    ) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
-            failed(-1)
-            return
-        }
-        helper?.destroy()
-        val r = SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
-        helper = r
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            r.triggerModelDownload(intent(tagFor(lang)), context.mainExecutor, object : ModelDownloadListener {
-                override fun onProgress(completedPercent: Int) = progress(completedPercent)
-                override fun onSuccess() = done()
-                override fun onScheduled() = scheduled()
-                override fun onError(error: Int) = failed(error)
-            })
-        } else {
-            r.triggerModelDownload(intent(tagFor(lang)))
-            scheduled()
-        }
-    }
-
-    fun start(lang: String, partial: (String) -> Unit, result: (String) -> Unit, failed: (Int) -> Unit) {
-        destroy()
-        val r = SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
-        recognizer = r
-        r.setRecognitionListener(object : RecognitionListener {
+    fun start(tag: String, partial: (String) -> Unit, result: (String) -> Unit, failed: () -> Unit, detected: (String?, Boolean) -> Unit = { _, _ -> }) {
+        cancel()
+        check(available()) { "On-device speech is unavailable." }
+        val token = generation
+        val local = SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
+        recognizer = local
+        local.setRecognitionListener(object : RecognitionListener {
             override fun onReadyForSpeech(params: Bundle?) {}
             override fun onBeginningOfSpeech() {}
             override fun onRmsChanged(rmsdB: Float) {}
             override fun onBufferReceived(buffer: ByteArray?) {}
             override fun onEndOfSpeech() {}
             override fun onEvent(eventType: Int, params: Bundle?) {}
-
-            override fun onPartialResults(partialResults: Bundle?) {
-                partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.let(partial)
+            override fun onLanguageDetection(results: Bundle) {
+                if (Build.VERSION.SDK_INT >= 34 && token == generation) detected(results.getString(SpeechRecognizer.DETECTED_LANGUAGE),
+                    results.getInt(SpeechRecognizer.LANGUAGE_DETECTION_CONFIDENCE_LEVEL) >= SpeechRecognizer.LANGUAGE_DETECTION_CONFIDENCE_LEVEL_CONFIDENT)
             }
-
-            override fun onResults(results: Bundle?) {
-                result(results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty())
-                destroy()
+            override fun onPartialResults(values: Bundle?) {
+                if (token == generation) partial(values?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty())
             }
-
-            override fun onError(error: Int) {
-                failed(error)
-                destroy()
+            override fun onResults(values: Bundle?) {
+                if (token != generation) return
+                val text = values?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty()
+                cancel(); result(text)
             }
+            override fun onError(error: Int) { if (token == generation) { cancel(); failed() } }
         })
-        r.startListening(intent(tagFor(lang)))
+        local.startListening(intent(tag))
     }
 
-    /** Ends listening; the final text arrives through onResult. */
-    fun stop() {
-        recognizer?.stopListening()
-    }
-
-    fun destroy() {
-        recognizer?.destroy()
-        recognizer = null
-    }
-
-    fun release() {
-        destroy()
-        helper?.destroy()
-        helper = null
-    }
-
-    companion object {
-        fun isMissingPack(code: Int) =
-            code == SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED || code == SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE
-
-        fun isNotHeard(code: Int) = code == SpeechRecognizer.ERROR_NO_MATCH || code == SpeechRecognizer.ERROR_SPEECH_TIMEOUT
-    }
+    fun stop() { recognizer?.stopListening() }
+    fun cancel() { generation++; recognizer?.cancel(); recognizer?.destroy(); recognizer = null }
+    fun close() { cancel(); support?.destroy(); support = null }
 }

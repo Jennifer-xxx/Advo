@@ -13,9 +13,10 @@ android {
     defaultConfig {
         applicationId = "com.gemmahack.symptomdiary"
         minSdk = 31
-        targetSdk = 35
-        versionCode = 1
-        versionName = "0.1"
+        targetSdk = 36
+        versionCode = 2
+        versionName = "0.2.0"
+        testInstrumentationRunner = "com.gemmahack.symptomdiary.OfflineDeviceChecks"
     }
 
     buildTypes {
@@ -32,9 +33,8 @@ android {
     }
     sourceSets {
         getByName("main") {
-            // Prompts, symptom knowledge and demo data live in ../../shared,
-            // one copy used by both this app and the Python tools.
-            assets.srcDirs("src/main/assets", "../../shared")
+            // Versioned local prompts and evaluation resources.
+            assets.srcDirs("src/main/assets", "../../shared/runtime")
         }
     }
     packaging {
@@ -60,5 +60,8 @@ dependencies {
     implementation("androidx.activity:activity-compose:1.10.1")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.9.1")
     implementation("androidx.core:core-ktx:1.16.0")
+    implementation("androidx.exifinterface:exifinterface:1.4.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
+    implementation("com.google.code.gson:gson:2.14.0")
+    testImplementation("junit:junit:4.13.2")
 }

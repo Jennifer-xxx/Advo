@@ -1,151 +1,126 @@
-# CareLog
+# Advo: Your personal health advocate, in your pocket.
 
-**A private symptom diary for people with chronic conditions, powered by Gemma 4 running entirely on the phone.**
+Advo is a private, on-device health companion powered by Gemma. It helps patients turn symptoms into clear appointment briefs, understand medical conversations and ask follow-up questions, and organize their health records in one place.
 
-Many patients find it hard to describe how they feel ("it just feels off", "a kind of pressure, I can't explain it"), and by the time they see a doctor the details of the last two weeks are gone. CareLog lets them talk or type in their own words. Gemma turns that into a structured record, the app gently asks for what is missing, and before an appointment it produces a one-page report the doctor can read in a minute.
+**Why Gemma:** Running on-device, Gemma keeps health processing private on the phone and lets Advo work offline, even in rural clinics. Its multimodal understanding handles voice, text and images in one model.
 
-Built for the [Google Gemma Hardware Hackathon](https://www.agihouse.org/events/the-google-gemma-hardware-hackathon) (Mobile track) on a Pixel 11 Pro.
+“You must be your own best advocate,” but in a 15-minute visit most patients can’t. Symptoms are hard to put into words, important connections get missed in the moment, and health history is scattered everywhere.
 
-- **100% on-device.** Gemma 4 runs through [LiteRT-LM](https://ai.google.dev/edge/litert-lm/android) on the phone's GPU. The app's manifest removes the `INTERNET` permission, so it physically cannot send data anywhere.
-- **The model understands, the code decides.** Gemma extracts symptoms and writes the report narrative. Which question to ask next, when to stop, and which symptoms are red flags are decided by plain code and a reviewable knowledge file.
-- **Bilingual.** The whole app runs in English or Chinese, and a report can be produced in the other language (useful for international students and immigrant families).
+Advo helps patients speak clearly, connect the dots, and keep their whole health story:
 
-## What it does
+- **Before:** Patients describe symptoms by voice in their own words. Advo asks short follow-ups about onset, severity, duration and change, then creates a one-page brief for the doctor, with continuation pages when needed.
+- **During:** With consent, Advo listens, tracks unanswered questions and surfaces questions about new prescriptions and the patient’s saved records. It never diagnoses. The current demo supports exact reviewed medicine/allergy-name comparisons; comprehensive medication-interaction checking requires a validated local reference database and is explicitly unavailable.
+- **After:** Each visit stays in a personal health Library: medications, allergies, appointments, source papers and reports. Patients can explicitly export and share a report with a caregiver; nothing is sent automatically.
 
-| Screen | What happens |
+## Techniques used
+
+- **Gemma 4 + LiteRT-LM:** one local multimodal model for audio transcription, document reading, grounded extraction, follow-up questions, translation and plain-language drafts.
+- **Pixel execution:** local GPU inference with CPU fallback, reused engine, bounded context/output, speculative decoding where supported, installed on-device dictation, offline TTS and thermal-aware processing.
+- **Native Android:** Kotlin, Jetpack Compose, coroutines, a microphone foreground service and encrypted 12-second recording segments.
+- **Grounded state:** strict JSON validation, verbatim source quotes, separate uncertainty/review/consent states, immutable report snapshots and explicit profile updates.
+- **Privacy:** no application network permission, Android Keystore AES-256-GCM storage, atomic writes, backup exclusions and user-directed password-encrypted backups.
+- **Local documents:** orientation-aware image import/cropping, multipage PDF reading and selectable-text Letter reports with native share/save/print.
+
+Built for the Gemma Hardware Hackathon **Mobile AI** track, targeting **Google Pixel 11 Pro** with **Gemma 4 and LiteRT-LM**. The English demo follows the two PRDs and four reference designs in [`specifications/`](specifications/). The current specifications supersede the earlier CareLog symptom-diary workflow. The application ID stays `com.gemmahack.symptomdiary` so updating an existing installation preserves its data and model directory.
+
+## The product
+
+| Journey | Working flow |
 | --- | --- |
-| **Log** | Describe the symptom by typing or by voice. Gemma extracts it into fixed fields (what, where, since when, how bad, what it feels like, what makes it worse or better, other symptoms, medicines). The app then asks up to three follow-up questions about missing fields, with tap-to-answer options (a 0–10 scale, descriptor words like "throbbing" or "pressure", condition-specific checklists). Red-flag phrases trigger an immediate "call 911" style alert. |
-| **History** | Saved entries, stored only in the app's private storage. Two synthetic 14-day demo diaries (English and Chinese) can be loaded with one tap. |
-| **Report** | Pick 7, 14 or 30 days and a language. Code aggregates the entries (frequency, severity trend, top triggers, what helped, medicines and their effect, the patient's own words); Gemma writes a short history-of-present-illness paragraph from that summary only. The patient can edit it, add questions for the doctor, and save it as a PDF. |
+| Before | Tap to talk or type; one question at a time; skip, pause and correct; source-linked symptom, medicine, allergy and history drafts; choose and order questions; review; create an English, selectable-text US Letter PDF; preview, save, share or print. Reports keep immutable versions. |
+| During | Per-recording **Everyone agreed** starts unchecked. Record only after consent and microphone permission, or continue with manual notes. Pause/resume/stop/withdraw; encrypted audio segments; genuine queued local transcription and quiet contextual question suggestions. **Show doctor** is a large English view on this phone. |
+| Before leaving | Review discussion, medicine changes, next steps and unanswered questions individually. Patient review and a patient's statement that they checked with the doctor are distinct. Finish with unresolved details still flagged. |
+| After | Capture or import local images and multipage PDFs; retain originals; rotate using photo orientation, zoom, crop a copy and retake; local Gemma document transcription and extraction; compare source wording; correct or leave unresolved; review a plain-English explanation and actions. Choose what to archive and which reviewed facts to add to the current profile. |
+| Health story | Visit timeline; separate current medicines, allergies, past medicines and medical history; unknown versus patient-reported none; source/history views; explicit profile corrections and historical status; scoped exports/deletions; password-encrypted local backup and verified, idempotent restore; optional local action reminders. |
 
-```mermaid
-flowchart LR
-    A[Patient speaks or types] --> B[Gemma 4: extract fields as JSON]
-    B --> C[Code: validate + safety guards + red-flag check]
-    C -->|red flag| R[Urgent-care alert]
-    C -->|missing fields| D[Code: pick next question + options]
-    D --> A
-    C -->|complete| E[(On-device diary)]
-    E --> F[Code: aggregate N days]
-    F --> G[Gemma 4: narrative, optional translation]
-    G --> H[One-page report / PDF]
-```
+No account, EHR connection, cloud inference, analytics or remote health storage is involved. Model and language availability are shown honestly. Missing resources never block manual notes or existing records.
 
-### Voice input
+## Hard offline boundary
 
-Two engines, switchable on the Log screen:
+- The merged APK excludes `INTERNET` and `ACCESS_NETWORK_STATE`. No HTTP client, cloud API, hosted model or telemetry is used by the application.
+- **Models are provisioned locally**, by USB or from local device storage. Import checks free space and a supplied publisher SHA-256, then atomically replaces the selected model. A failed import preserves the installed model. No in-app model or language downloads are started.
+- Pixel dictation uses `createOnDeviceSpeechRecognizer` only, after installed-language verification. Missing support offers Gemma audio or text. Read-aloud refuses network-required or uninstalled voices; it has no default online fallback.
+- Images, PDFs, model imports, backups and restores accept known local document providers only. Pick **Downloads** or **internal storage**. Cloud providers are rejected even if they appear in the Android picker.
+- Reports are generated locally. An explicit system share or print action can hand a PDF to a user-selected external application; that application's network behavior is outside Advo. Canceling does not delete the report. For a strictly offline demo, save locally or use Android's local PDF printer.
 
-- **Phone (offline):** Android's on-device speech recognizer, which on Pixel is Google's on-device speech service. Live captions, automatic end-of-speech, best Chinese accuracy. The app checks which language packs are installed and shows download progress if one is missing.
-- **Gemma:** the recording is sent straight to Gemma 4's audio input.
+The PRDs' initial downloads and iPhone baseline are adapted to the user's stricter no-cloud Android/Pixel requirements. All demo UI and explanations are English. Other voice inputs and English translations are available as reviewable, device-dependent capabilities; multilingual clinical fidelity is **not** asserted as validated. See the complete [feature coverage and remaining validation gates](docs/FEATURE-COVERAGE.md).
 
-Either way, Gemma does all of the understanding. If the patient answers a question out loud ("nausea, and a bit sensitive to light"), the matching option chips are selected automatically.
+## Run on the Pixel
 
-### Safety rules in code
-
-- A 0–10 severity score is kept only if the patient's words actually contain a number.
-- Generic words ("hurts", "疼") are not accepted as a description of how something feels.
-- Red flags (chest pain with breathing trouble, sudden worst headache, one-sided weakness, bleeding, fainting, fever with stiff neck, self-harm) are matched by keyword with simple negation handling, so "no fever" does not trigger.
-- The model is never asked to diagnose or suggest medicines, and the report states that it is not a diagnosis.
-
-## Evaluation
-
-36 hand-written test sentences (18 English, 18 Chinese), including vague descriptions, negations ("no fever") and lab values that must not be read as severity. Each field is scored by accuracy or F1, and **hallucinations** count values the patient never said. Everything below was run on a MacBook (CPU) with the same model files the phone uses, unless noted.
-
-| Model and runtime | JSON valid | Hallucinations | Median time per sentence | Notes |
-| --- | --- | --- | --- | --- |
-| Gemma 4 E2B, GGUF QAT (llama.cpp) | 36/36 | 6 | 2.8 s | Final prompt design (v3) |
-| Gemma 4 E2B, LiteRT (phone format) | 36/36 | 14 | 6.7 s | Copied vague onset words from the prompt examples, which led to a prompt fix |
-| **Gemma 4 E4B, LiteRT** | 36/36 | **3** | 13.5 s | Best quality |
-| MedGemma 1.5 4B, LiteRT | 36/36 | 6 | 54.4 s | Medication F1 only 0.22; not used |
-| **Gemma 4 E4B, LiteRT, short output (shipped)** | 36/36 | 4 | 12.2 s | Medication 1.00, onset 0.97, timing 0.86 |
-
-What changed the results most:
-
-1. **One prompt per language.** A single bilingual prompt made the model answer English input in Chinese; separate `extract.en.txt` / `extract.zh.txt` fixed that.
-2. **Clear field definitions.** "Only the quality of the feeling itself" for `character`, and "the body part, even when it is part of the complaint" for `location`. With E2B, location and aggravating factors went from 0.89 and 0.91 to 1.00.
-3. **Code guards** for severity and generic words, plus never letting the model fill a field from the examples.
-4. **Short output.** Omitting empty fields makes the JSON for a short description several times shorter, which matters because generating tokens dominates on-device latency.
-
-On the Pixel 11 Pro (Tensor G6, GPU backend) with E4B: model load 21.6 s at app start, about 9–11 s per extraction with the full-length output, and 12 s for a report narrative. Answers given by tapping options need no model call.
-
-Reproduce with `python/eval_extraction.py` and compare runs with `python/compare_runs.py` (see below).
-
-## Repository layout
-
-```
-shared/                 one copy of everything the app and the Python tools both use
-  prompts/              extraction (per language), follow-up context, transcription, report, translation
-  knowledge/            follow-up questions, condition checklists, red flags (must be clinically reviewed)
-  eval/                 36-sentence bilingual extraction test set
-  demo/                 synthetic 14-day diaries, English and Chinese
-android/                Kotlin + Jetpack Compose app using LiteRT-LM
-python/                 prompt iteration, evaluation, report preview (development only, not the demo)
-docs/                   sample reports rendered from the demo data
-```
-
-The Android app packages `shared/` as assets, so editing a prompt or the knowledge file changes both the app (after a rebuild) and the evaluation.
-
-## Running the app
-
-1. Install Android Studio and open the `android/` folder. If it asks for a Gradle JDK, choose **JVM 21** (Gradle 8.11.1 does not run on Java 25).
-2. On the phone, enable Developer options and USB debugging, connect it, and press **Run**.
-3. Download a model and push it to the app's folder. The app loads E4B if present, otherwise E2B:
-
-   ```bash
-   # https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm  (or gemma-4-E2B-it-litert-lm)
-   adb shell mkdir -p /sdcard/Android/data/com.gemmahack.symptomdiary/files
-   adb push gemma-4-E4B-it.litertlm /sdcard/Android/data/com.gemmahack.symptomdiary/files/
-   ```
-
-4. Restart the app. The status bar should read "Gemma ready · GPU". Reinstalling with **Run** keeps the model; uninstalling deletes it.
-
-Tested on a Pixel 11 Pro (16 GB RAM, Android 17). E4B needs a phone with plenty of memory; on 8 GB phones use E2B.
-
-## Running the evaluation
-
-The tools use only the Python standard library and talk to any local OpenAI-compatible server.
+Use **JDK 21**, Android SDK 36 and a USB-connected, unlocked Pixel with USB debugging enabled. Do not use Android Studio's bundled JDK 25 with this Gradle version.
 
 ```bash
-cd python
-python3 tests/test_core.py                     # model-free unit tests
-
-# Option A: LiteRT-LM, same .litertlm files as the phone
-litert-lm import /path/to/gemma-4-E4B-it.litertlm
-litert-lm serve &                              # port 9379
-python3 eval_extraction.py --base-url http://127.0.0.1:9379/v1 --model gemma-4-E4B-it.litertlm --tag e4b
-
-# Option B: llama.cpp with a GGUF build
-llama-server -m gemma-4-E2B-it-qat-UD-Q4_K_XL.gguf --port 8080 -c 8192 --jinja --reasoning-budget 0 &
-python3 eval_extraction.py --tag e2b
-
-python3 compare_runs.py e2b e4b                # side-by-side table
-python3 interview.py                           # chat through one entry in the terminal
-python3 report.py --lang en --out report.html  # report from the demo diary
+cd android
+export JAVA_HOME=$(/usr/libexec/java_home -v 21)
+./gradlew :app:assembleDebug :app:testDebugUnitTest :app:lintDebug
+adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Turn off Gemma 4's thinking mode on llama.cpp (`--reasoning-budget 0`); otherwise it spends the token budget thinking and never writes the JSON.
+Gradle may need network access to provision development dependencies. That is separate from the installed application's runtime. The Gradle wrapper and dependency versions are pinned.
 
-## Changing behaviour
+Provision a compatible model on your development computer, accepting its publisher's terms. Official model listings: [Gemma 4 E2B](https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm) and [Gemma 4 E4B](https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm). Use a `.litertlm` file, not a GGUF file.
 
-| To change | Edit |
-| --- | --- |
-| Extraction rules and examples | `shared/prompts/extract.en.txt`, `extract.zh.txt` |
-| Follow-up questions, options, order, maximum number | `shared/knowledge/symptom_knowledge.json` (`slot_questions`, `slot_order`, `max_followups`) |
-| Condition checklists and red flags | same file, `conditions` and `red_flags` |
-| Test sentences | `shared/eval/extraction_testset.jsonl` (format documented in `eval_extraction.py`) |
-| Demo diaries | `python/make_demo_data.py`, then run it |
+```bash
+adb shell mkdir -p /sdcard/Android/data/com.gemmahack.symptomdiary/files
+adb push /path/to/gemma-4-E4B-it.litertlm /sdcard/Android/data/com.gemmahack.symptomdiary/files/
+adb shell am start -n com.gemmahack.symptomdiary/.MainActivity
+```
 
-The Python and Kotlin logic mirror each other: `extraction.py` and `interview.py` match `Interview.kt`; `report.py` matches `Report.kt`.
+Alternatively copy the model into Downloads and use **Settings → Offline resources → Import / update**, with the publisher's SHA-256. E2B is preferred for its smaller footprint; E4B can be selected for a larger model. The other variant is used if the preferred file is absent. Sideloaded models without an app-verified publisher checksum are identified explicitly.
 
-## Roadmap
+Before the demo, provision the desired Pixel offline speech pack and an offline English TTS voice in Android's settings. Advo will not download either. Then enable airplane mode and use **Settings → Open a synthetic demo visit**. Demo content is labeled and never replaces other visits.
 
-- Live voice conversation: Gemma replies out loud, keeping one conversation open so turns are fast.
-- PDF download and sharing through the system share sheet.
-- Gemma on the Tensor G6 TPU (precompiled E2B) for the conversation, E4B on the GPU for extraction.
-- Camera: read a medicine box or prescription label with Gemma's vision input.
-- Sleep and heart rate from Health Connect next to symptoms in the report.
-- Diary encrypted with a hardware-backed key; "have I felt this before?" search with EmbeddingGemma.
+### Pixel-specific behavior
 
-## Disclaimer
+The app uses Pixel's installed on-device speech service, GPU-backed LiteRT-LM, a reused local engine, bounded inference context/output and GPU speculative decoding where supported. Audio and vision initialize only when supported by the selected model/runtime. Model load and processing durations, queue length, device/SOC and thermal status are visible under Offline resources. Severe thermal status defers live processing while recording keeps saving.
 
-CareLog is a hackathon prototype, not a medical device. It does not diagnose or give treatment advice. The red-flag list and condition checklists were written for the demo and must be reviewed against clinical sources before any real use. All demo data is synthetic.
+The connected hardware reports **Pixel 11 Pro / Tensor G6**. GPU/CPU fallback reports the backend actually initialized. **This build does not claim Tensor TPU execution.** That requires separately provisioned compatible compiled weights and vendor runtime libraries; their absence cannot become a cloud fallback. Use the [official LiteRT-LM Android guide](https://developers.google.com/edge/litert-lm/android) and [Google Tensor documentation](https://developers.google.com/edge) for that integration.
+
+## Safety and data design
+
+Gemma transcribes audio, reads papers, extracts grounded facts, asks one preparation question, proposes optional visit questions, translates and explains supplied facts. Application code owns permissions, consent, state transitions, persistence, profile changes, sharing and deletion. The model has no tools that can perform those actions.
+
+Extraction responses must pass a strict contract: allowed keys and enums, string/boolean types, actual source IDs, verbatim source quotes and literal supporting medication fields. Invalid output retries once, then preserves the source for retry/manual editing. Model output never becomes a reviewed fact automatically. Transcription and OCR can still make errors; every extracted clinical detail starts as a draft.
+
+**Drug safety has a narrow, explicit boundary.** A reviewed allergy with a recorded reaction and an exactly matching reviewed medicine name can produce a question to check with the clinician. It is not a drug-class matcher, diagnosis, contraindication engine or prescription-safety verdict. Broad interaction checking remains unavailable because no validated, licensed local drug database is bundled. The UI always explains this missing coverage; no result never means safe. The earlier prototype's unreviewed keyword emergency rules are not used by the Android product.
+
+`Visit` links sources, facts, questions, consent, report snapshots, processing generations and reminders. Stage, recording state, processing status and fact review status are separate. Every generation records its model, prompt version, sources and duration. Corrections preserve earlier wording and sources. Only explicitly chosen, reviewed profile facts are promoted; stable fact IDs prevent repeated saves from duplicating them. A correction can move an earlier entry into history and link its replacement.
+
+Health records and attachments use **AES-256-GCM**, atomic writes and a non-exportable Android Keystore key. Hardware backing depends on the device; the app does not claim StrongBox use. Data resides in `noBackupFilesDir`; cloud backup and device transfer are excluded. Existing `diary.json` is migrated with its full original payload and removed only after encrypted storage commits. An unreadable store is preserved and cannot be overwritten by ordinary edits. Health contents are not written to application debug logs, and native model logging is suppressed.
+
+Recording runs in a microphone foreground service with an ongoing Stop notification. Twelve-second PCM/WAV chunks are encrypted before their references commit. Pauses, focus loss, silencing and process recovery preserve committed segments and expose interruption state. Up to the active 12-second in-memory chunk can be lost on abrupt process death; arbitrary long-session durability and battery/thermal behavior need sustained device testing. Android may stop the app under resource pressure.
+
+Original audio can be played from memory without a plaintext audio file. PDF rendering requires a seekable private temporary file, removed in `finally` and at fresh process startup. Explicit PDF/export copies temporarily exist in private cache; they are cleared on a fresh process start. Exported device files and password-protected backups remain under the user's control. Screen capture/recent-app previews are protected by default; synthetic demo screenshots can be enabled explicitly for one session.
+
+Backups use a separate **PBKDF2-HMAC-SHA256 (210,000 rounds), AES-256-GCM** password envelope. Restore verifies authentication, schema, paths, limits, source references and attachment completeness before committing. Existing visit/profile IDs win on merge; settings are preserved. Wrong passwords and corrupted backups do not alter the live index. Limits: 32 MB document import, 200 PDF pages per file, 40 MB per backup entry, 4 GB expanded backup. Reminders use user-entered date/time, a saved zone and inexact local alarms; delivery is approximate and reminders are rescheduled on app startup, not guaranteed across reboot until reopened.
+
+## Repository
+
+```text
+android/                        native Kotlin / Jetpack Compose application
+  app/src/main/java/.../        domain, encrypted store, local AI, recording, files, exports, screens
+  app/src/test/                 pure safety, contract and state tests
+  app/src/androidTest/          isolated on-device storage/backup/PDF/Gemma checks
+shared/runtime/prompts/withyou/  versioned product prompts; the only shared assets packaged by Android
+docs/                          feature traceability, validation record and demo instructions
+scripts/                       reproducible local validation helpers
+python/                        historical symptom-extraction evaluation tools, development only
+shared/{prompts,knowledge,...}/ historical evaluation inputs; not bundled in the Android application
+```
+
+The historical Python tools/results describe the former symptom diary and its old prompts, not the new product's clinical or model quality. They remain useful for regressions and prompt research. Run `python3 python/tests/test_core.py`; see [their scope](python/README.md). There is one current Android visit pipeline; the obsolete diary UI, duplicate Android interview/report logic and bilingual UI string switch have been removed.
+
+## Validation
+
+```bash
+cd android
+./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+adb install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+# Isolated synthetic stores; does not read or clear the user's repository.
+adb shell am instrument -w com.gemmahack.symptomdiary.test/com.gemmahack.symptomdiary.OfflineDeviceChecks
+# Also initialize the local model and test grounded extraction and a synthetic paper image:
+adb shell am instrument -w -e gemma true com.gemmahack.symptomdiary.test/com.gemmahack.symptomdiary.OfflineDeviceChecks
+```
+
+Read [VALIDATION.md](docs/VALIDATION.md) for actual results and unresolved device/quality gates. Test pass counts do not establish clinical validation. Advo is a communication prototype intended for the hackathon demonstration, not a clinical decision system.

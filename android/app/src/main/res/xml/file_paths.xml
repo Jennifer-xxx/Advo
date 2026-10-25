@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Short-lived files released only by an explicit user action. -->
+<paths>
+    <cache-path name="reports" path="reports/" />
+    <cache-path name="capture" path="capture/" />
+    <cache-path name="exports" path="exports/" />
+</paths>
