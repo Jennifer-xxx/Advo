@@ -22,7 +22,8 @@ enum class Screen(val label: String) {
     CONSENT("Start your visit"), LIVE("During your visit"), WRAP_UP("Before you leave"), SCAN("Save your instructions"),
     EXTRACTION("Review the details"), PLAN("Your plan"), SAVE("Save to your records"), RECORDS("Library"),
     HEALTH("Health essentials"), DETAIL("Visit details"), SETTINGS("Settings"), RESOURCES("Offline resources"),
-    LANGUAGE("Your language"), DOCTOR("Show doctor"), SOURCE("Original source"), VISITS("Visits"), BRIEF("Prepare for a visit"),
+    LANGUAGE("Your language"), DOCTOR("Show doctor"), SOURCE("Original source"), VISITS("Visits"), BRIEF("Choose symptoms"),
+    VISIT_CHAT("Ask Advo"), PLAN_DETAILS("Visit wording"), QUESTIONS("My doctor questions"),
 }
 
 class WithYouViewModel(app: Application) : AndroidViewModel(app) {
@@ -85,6 +86,9 @@ class WithYouViewModel(app: Application) : AndroidViewModel(app) {
     val currentTalk: TalkSession? get() = visit?.talks?.lastOrNull { it.id == talkId } ?: visit?.talks?.lastOrNull()
     private var sourceBack = Screen.DETAIL
     private var doctorBack = Screen.LIVE
+    var briefTargetId by mutableStateOf<String?>(null); private set
+    private var wrapUpJob: Job? = null
+    private var carePreparationCancelled = false
     private val thermalListener = PowerManager.OnThermalStatusChangedListener { thermal = it }
 
     val modelName: String get() = engine.modelName
@@ -96,6 +100,7 @@ class WithYouViewModel(app: Application) : AndroidViewModel(app) {
     val processingQueue: Int get() = data.visits.sumOf { v -> v.sources.count { it.status in setOf(Processing.QUEUED, Processing.PROCESSING, Processing.FAILED) } }
     val canStopProcessing: Boolean get() = engine.generating
     fun stopProcessing() {
+        carePreparationCancelled = true
         if (talkPhase in setOf(TalkPhase.THINKING, TalkPhase.SPEAKING)) pauseTalk()
         if (engine.stopGeneration()) processingLabel = "Stopping local processing…"
     }
@@ -111,7 +116,7 @@ class WithYouViewModel(app: Application) : AndroidViewModel(app) {
                 // Real captured chunks only. Fall behind gracefully without manufacturing live results.
                 val candidate = data.visits.firstOrNull { it.recording == Recording.RECORDING }
                 val pending = candidate?.sources?.firstOrNull { it.status == Processing.QUEUED }
-                if (candidate != null && pending != null && modelReady && !busy && thermal < PowerManager.THERMAL_STATUS_SEVERE) {
+                if (candidate != null && pending != null && modelReady && !busy && screen != Screen.VISIT_CHAT && thermal < PowerManager.THERMAL_STATUS_SEVERE) {
                     process(candidate.id, pending.id, quiet = true)
                 }
             }
@@ -137,30 +142,44 @@ class WithYouViewModel(app: Application) : AndroidViewModel(app) {
     fun back() = navigate(when (screen) {
         Screen.HOME -> Screen.HOME
         Screen.PREPARE, Screen.RECORDS, Screen.VISITS -> Screen.HOME
-        Screen.BRIEF -> Screen.RECORDS
+        Screen.BRIEF -> if (briefTargetId != null) Screen.DETAIL else Screen.VISITS
         Screen.REVIEW -> Screen.PREPARE
-        Screen.REPORT -> Screen.REVIEW
+        Screen.REPORT -> Screen.DETAIL
         Screen.CONSENT -> if (visit?.reports?.isNotEmpty() == true) Screen.REPORT else Screen.DETAIL
         Screen.LIVE -> Screen.DETAIL
         Screen.WRAP_UP -> Screen.LIVE
         Screen.SCAN -> Screen.DETAIL
-        Screen.EXTRACTION -> if (visit?.kind == RecordKind.SYMPTOM) Screen.DETAIL else Screen.SCAN
-        Screen.PLAN -> Screen.EXTRACTION
+        Screen.EXTRACTION -> if (visit?.kind != RecordKind.VISIT) Screen.DETAIL else Screen.SCAN
+        Screen.PLAN -> Screen.DETAIL
+        Screen.PLAN_DETAILS -> Screen.PLAN
+        Screen.VISIT_CHAT -> if (visit?.stage == Stage.IN_VISIT || visit?.isCapturing == true) Screen.LIVE else Screen.DETAIL
+        Screen.QUESTIONS -> if (visit?.stage == Stage.IN_VISIT || visit?.isCapturing == true) Screen.LIVE else Screen.DETAIL
         Screen.SAVE -> Screen.PLAN
         Screen.HEALTH, Screen.SETTINGS -> Screen.RECORDS
-        Screen.DETAIL -> if (visit?.kind == RecordKind.VISIT) Screen.VISITS else Screen.RECORDS
+        Screen.DETAIL -> when (visit?.kind) { RecordKind.VISIT -> Screen.VISITS; RecordKind.PROFILE -> Screen.HEALTH; else -> Screen.RECORDS }
         Screen.RESOURCES, Screen.LANGUAGE -> Screen.SETTINGS
         Screen.DOCTOR -> doctorBack
         Screen.SOURCE -> sourceBack
     })
 
     fun newVisit(target: Screen = Screen.PREPARE, thenListen: Boolean = false) = action {
+        if (target == Screen.CONSENT) {
+            val recording = repository.state.value.visits.firstOrNull { it.isCapturing }
+            if (recording != null) { selectVisit(recording.id, Screen.LIVE); return@action }
+        }
         val v = Visit(language = data.settings.voiceLanguage,
             kind = if (target == Screen.CONSENT) RecordKind.VISIT else RecordKind.SYMPTOM,
             title = if (target == Screen.CONSENT) "Doctor visit" else "New visit")
         change { it.copy(visits = it.visits + v) }
         selectVisit(v.id, target)
         if (target == Screen.PREPARE) beginTalk(voice = thenListen)
+    }
+
+    fun newProfileRecord(target: Screen = Screen.PREPARE, voice: Boolean = false) = action {
+        val record = Visit(kind = RecordKind.PROFILE, title = "Health profile update", language = data.settings.voiceLanguage)
+        change { it.copy(visits = it.visits + record) }
+        selectVisit(record.id, target)
+        if (target == Screen.PREPARE) beginTalk(voice)
     }
 
     fun selectVisit(id: String, target: Screen = Screen.DETAIL) {
@@ -290,13 +309,27 @@ class WithYouViewModel(app: Application) : AndroidViewModel(app) {
         if (open && visitId == id) { reportFile = file; reportIndex = -1; navigate(Screen.REPORT) }
     }
 
+    fun openBriefSelection(forCurrentVisit: Boolean = false) {
+        briefTargetId = if (forCurrentVisit) visitId else null
+        navigate(Screen.BRIEF)
+    }
+
     fun prepareFromRecords(ids: Set<String>): Job = action {
         require(ids.isNotEmpty()) { "Choose at least one symptom entry." }
         check(!busy) { "Please wait for the current conversation to finish processing." }
         val selected = RecordRules.selected(repository.state.value, ids.toList())
-        val target = Visit(kind = RecordKind.VISIT, title = "Appointment brief", relatedRecordIds = selected.map { it.id },
+        val existingId = briefTargetId
+        val target = if (existingId != null) repository.visit(existingId)
+        else Visit(kind = RecordKind.VISIT, title = "Doctor visit", relatedRecordIds = selected.map { it.id },
             language = data.settings.voiceLanguage, briefStatus = Processing.PROCESSING)
-        change { it.copy(visits = it.visits + target) }
+        change { state -> state.copy(visits = if (existingId == null) state.visits + target else state.visits.map { current ->
+            if (current.id != target.id) current else {
+                require(current.kind == RecordKind.VISIT && current.stage in setOf(Stage.PREPARING, Stage.READY, Stage.IN_VISIT))
+                // Merge into the latest visit under the repository lock; a recording may just have saved another segment.
+                current.copy(relatedRecordIds = selected.map { it.id }, briefStatus = Processing.PROCESSING)
+            }
+        }) }
+        briefTargetId = null
         selectVisit(target.id, Screen.REPORT)
         generateBrief(target.id)
     }
@@ -354,6 +387,7 @@ class WithYouViewModel(app: Application) : AndroidViewModel(app) {
         require(everyoneAgreed) { "Ask everyone in the room and confirm consent first." }
         val id = visitId ?: return@action
         stopSpeaking(); cancelDictation()
+        check(repository.state.value.visits.none { it.id != id && it.isCapturing }) { "Finish the active visit recording first." }
         changeVisit(id) { v -> check(!v.isCapturing); v.copy(stage = Stage.IN_VISIT, consents = v.consents + Consent()) }
         VisitRecordingService.command(context, id, "start")
         navigate(Screen.LIVE)
@@ -369,6 +403,87 @@ class WithYouViewModel(app: Application) : AndroidViewModel(app) {
 
     fun showDoctor(question: String, reason: String = "") {
         doctorQuestion = question; doctorReason = reason; doctorBack = screen; navigate(Screen.DOCTOR)
+    }
+
+    fun askVisitQuestion(question: String) = action {
+        val id = visitId ?: return@action
+        val text = question.trim()
+        require(text.isNotBlank() && text.length <= 2000) { "Use a short question, up to 2,000 characters." }
+        if (busy) { notice = "Advo is organizing recorded audio. You can add this to your doctor questions now, or ask Advo when processing finishes."; return@action }
+        val v = repository.visit(id)
+        require(v.kind == RecordKind.VISIT)
+        val passages = ClarificationRules.passages(v)
+        val request = VisitClarification(question = text)
+        beginProcessing("Finding the answer in this visit")
+        try {
+            changeVisit(id) { it.copy(clarifications = it.clarifications + request) }
+            check(modelReady) { "The local model is not ready. Your question is saved; you can show it to your doctor." }
+            val (answer, seconds) = intelligence.clarifyVisit(text, passages)
+            changeVisit(id) { current ->
+                check(ClarificationRules.passages(current) == passages) { "Visit wording changed. Ask again to use the latest audio." }
+                current.copy(clarifications = current.clarifications.map { if (it.id == request.id) it.copy(
+                    answer = answer.text, evidence = answer.evidence, status = Processing.READY) else it },
+                    generations = current.generations + Generation(task = "Visit clarification", model = engine.modelName,
+                        promptVersion = "visit-clarification-v1", sourceIds = answer.evidence.map { it.sourceId }.distinct(), seconds = seconds))
+            }
+        } catch (e: CancellationException) { throw e }
+        catch (e: Exception) {
+            changeVisit(id) { it.copy(clarifications = it.clarifications.map { old -> if (old.id == request.id) old.copy(
+                status = Processing.FAILED, error = if (e is ProcessingStoppedException) "Stopped. Your question is saved." else
+                    "An answer could not be verified from the saved visit. Ask your doctor or try again after audio is organized.") else old }) }
+        } finally { endProcessing() }
+    }
+
+    fun prepareWrapUp() {
+        if (wrapUpJob?.isActive == true) { navigate(Screen.WRAP_UP); return }
+        val id = visitId ?: return
+        navigate(Screen.WRAP_UP)
+        carePreparationCancelled = false
+        wrapUpJob = action {
+            if (repository.visit(id).isCapturing) {
+                VisitRecordingService.command(context, id, "stop")
+                check(withTimeoutOrNull(10000) { while (repository.visit(id).isCapturing) delay(100); true } == true) {
+                    "Audio is still finishing. Your saved segments are kept. Return to the visit to check recording."
+                }
+            }
+            changeVisit(id) { it.copy(stage = Stage.WRAP_UP) }
+            while (busy) delay(100)
+            if (!modelReady || carePreparationCancelled) return@action
+            val pending = repository.visit(id).sources.filter { it.status in setOf(Processing.QUEUED, Processing.FAILED) }
+            for (source in pending) {
+                if (carePreparationCancelled) return@action
+                process(id, source.id, quiet = true)
+            }
+            if (!carePreparationCancelled && repository.visit(id).currentFacts.any {
+                    it.category in setOf(Category.DISCUSSION, Category.MEDICINE_CHANGE, Category.ACTION) }) {
+                explainVisit(id)
+            }
+        }
+    }
+
+    fun completeAction(factId: String, done: Boolean) = action {
+        val id = visitId ?: return@action
+        changeVisit(id) { CarePlanRules.complete(it, factId, done) }
+        if (done) {
+            val reminderId = stableId(id, factId)
+            LocalReminders.cancel(context, id, reminderId)
+            changeVisit(id) { it.copy(reminders = it.reminders.filter { r -> r.id != reminderId }) }
+        }
+    }
+
+    fun confirmProfileUpdate(factId: String) = action {
+        val id = visitId ?: return@action
+        change { state -> CarePlanRules.confirmProfileUpdate(state, state.visits.first { it.id == id }, factId) }
+    }
+
+    fun finishCarePlan() = action {
+        val id = visitId ?: return@action
+        check(!repository.visit(id).isCapturing) { "Stop visit recording first." }
+        changeVisit(id) { it.copy(stage = Stage.ARCHIVED, archivedAt = it.archivedAt ?: now(),
+            savedSummary = it.savedSummary || it.summary.isNotBlank(),
+            savedSourceIds = (it.savedSourceIds + it.sources.map { s -> s.id }).distinct(),
+            savedFactIds = (it.savedFactIds + it.currentFacts.filter { f -> !f.needsReview }.map { f -> f.id }).distinct()) }
+        navigate(Screen.VISITS)
     }
 
     /** One conversation, one patient-only source, checkpointed after every turn. */
@@ -601,7 +716,8 @@ class WithYouViewModel(app: Application) : AndroidViewModel(app) {
             if (source.text.isBlank()) return@action
             while (busy || modelLoading) delay(100)
             if (modelReady) {
-                summarizeTalk(id, source.id)
+                if (repository.visit(id).kind == RecordKind.PROFILE) process(id, source.id)
+                else summarizeTalk(id, source.id)
             }
         }
     }
@@ -794,6 +910,9 @@ class WithYouViewModel(app: Application) : AndroidViewModel(app) {
     fun explainPlan() = action {
         val id = visitId ?: return@action
         if (!modelReady || busy) { notice = "Review the source details now, or retry when Gemma is ready."; return@action }
+        explainVisit(id)
+    }
+    private suspend fun explainVisit(id: String) {
         beginProcessing("Explaining your visit instructions")
         try {
             val sourceFacts = repository.visit(id).facts

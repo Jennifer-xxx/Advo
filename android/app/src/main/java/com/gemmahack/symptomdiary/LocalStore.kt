@@ -83,6 +83,8 @@ object StoreCodec {
             val visit = element.asJsonObject
             if (!visit.has("inputDraftKind")) visit.addProperty("inputDraftKind", "PATIENT_TEXT")
             if (!visit.has("talks")) visit.add("talks", JsonArray())
+            if (!visit.has("clarifications")) visit.add("clarifications", JsonArray())
+            if (!visit.has("completedActionIds")) visit.add("completedActionIds", JsonArray())
             if (!visit.has("kind")) {
                 val isProfile = visit["title"]?.asString?.startsWith("Health essentials updated") == true || visit.has("replacingProfileId")
                 val isVisit = visit.getAsJsonArray("consents")?.size()?.let { it > 0 } == true ||
@@ -129,6 +131,7 @@ object StoreCodec {
             requireNotNull(visit.kind); requireNotNull(visit.relatedRecordIds); requireNotNull(visit.briefSummary)
             requireNotNull(visit.consents); requireNotNull(visit.questions); requireNotNull(visit.reports)
             requireNotNull(visit.generations); requireNotNull(visit.reminders); requireNotNull(visit.skippedQuestions)
+            requireNotNull(visit.clarifications); requireNotNull(visit.completedActionIds)
             require(visit.sources.map { it.id }.distinct().size == visit.sources.size)
             require(visit.facts.map { it.id }.distinct().size == visit.facts.size)
             visit.sources.forEach { s ->
@@ -146,6 +149,13 @@ object StoreCodec {
                 talk.turns.forEach { requireNotNull(it.role); require(it.text.isNotBlank() && it.text.length <= 100000) }
             }
             visit.facts.forEach { f -> validateFact(f); require(f.sourceId in sourceIds) }
+            require(visit.completedActionIds.all { id -> visit.facts.any { it.id == id && it.category == Category.ACTION } })
+            require(visit.clarifications.map { it.id }.distinct().size == visit.clarifications.size)
+            visit.clarifications.forEach { answer ->
+                requireNotNull(answer.status); requireNotNull(answer.evidence)
+                require(answer.question.isNotBlank() && answer.question.length <= 2000 && answer.answer.length <= 1800)
+                answer.evidence.forEach { require(it.sourceId in sourceIds && it.quote.isNotBlank() && it.quote.length <= 1600) }
+            }
             visit.questions.forEach { q ->
                 requireNotNull(q.origin); requireNotNull(q.state); require(q.text.length <= 10000)
                 require(q.sourceIds.all { it in sourceIds })

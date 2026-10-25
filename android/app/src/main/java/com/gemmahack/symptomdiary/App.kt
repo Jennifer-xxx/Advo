@@ -49,6 +49,7 @@ class UiController(val vm: WithYouViewModel) {
     lateinit var exportSource: (Source) -> Unit
     lateinit var exportSummary: () -> Unit
     lateinit var withNotifications: (() -> Unit) -> Unit
+    lateinit var remind: (Fact) -> Unit
 
     fun ask(title: String, label: String, initial: String = "", button: String = "Save", description: String = "", done: (String) -> Unit) {
         form = FormRequest(title, listOf(label), listOf(initial), button, description, false) { done(it[0]) }
@@ -78,6 +79,12 @@ fun App(vm: WithYouViewModel) {
         }
     }
     LaunchedEffect(vm.screen, vm.visitId) { scroll.scrollTo(0) }
+    LaunchedEffect(vm.screen, vm.currentTalk?.turns?.size, vm.visit?.clarifications?.size) {
+        if (vm.screen == Screen.PREPARE && vm.talkTyped || vm.screen == Screen.VISIT_CHAT) {
+            delay(100)
+            scroll.animateScrollTo(scroll.maxValue)
+        }
+    }
     val ui = remember(vm) { UiController(vm) }
     var afterMic by remember { mutableStateOf<(() -> Unit)?>(null) }
     var afterNotification by remember { mutableStateOf<(() -> Unit)?>(null) }
@@ -139,6 +146,17 @@ fun App(vm: WithYouViewModel) {
         if (Build.VERSION.SDK_INT < 33 || ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) action()
         else { afterNotification = action; notifications.launch(Manifest.permission.POST_NOTIFICATIONS) }
     }
+    ui.remind = { fact ->
+        val initial = java.time.LocalDateTime.now().plusHours(1)
+        android.app.DatePickerDialog(context, { _, year, month, day ->
+            android.app.TimePickerDialog(context, { _, hour, minute ->
+                val chosen = java.time.LocalDateTime.of(year, month + 1, day, hour, minute)
+                ui.withNotifications { vm.scheduleReminder(fact.id, chosen.toString()) }
+            }, initial.hour, initial.minute, android.text.format.DateFormat.is24HourFormat(context)).show()
+        }, initial.year, initial.monthValue - 1, initial.dayOfMonth).apply {
+            datePicker.minDate = System.currentTimeMillis()
+        }.show()
+    }
     ui.capture = {
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) launchCamera()
         else camera.launch(Manifest.permission.CAMERA)
@@ -163,9 +181,9 @@ fun App(vm: WithYouViewModel) {
             Column(Modifier.statusBarsPadding()) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 17.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                    if (vm.screen != Screen.HOME) IconButton(onClick = { vm.back() }, modifier = Modifier.semantics { contentDescription = "Back" }) { Glyph("back") }
+                    if (vm.screen !in setOf(Screen.HOME, Screen.VISITS, Screen.RECORDS)) IconButton(onClick = { vm.back() }, modifier = Modifier.semantics { contentDescription = "Back" }) { Glyph("back") }
                     else Box(Modifier.padding(9.dp)) { androidx.compose.foundation.Canvas(Modifier.size(15.dp)) { drawCircle(Color(0xffffb78e)) } }
-                    Text(if (vm.screen == Screen.HOME) "Advo" else if (vm.screen == Screen.DETAIL && vm.visit?.kind == RecordKind.SYMPTOM) "Symptom entry" else vm.screen.label,
+                    Text(if (vm.screen == Screen.HOME) "Advo" else if (vm.screen == Screen.DETAIL && vm.visit?.kind == RecordKind.SYMPTOM) "Symptom entry" else if (vm.screen == Screen.DETAIL && vm.visit?.kind == RecordKind.PROFILE) "Health profile update" else vm.screen.label,
                         modifier = Modifier.weight(1f), fontSize = 17.sp, fontWeight = FontWeight.Medium)
                     if (vm.screen in setOf(Screen.HOME, Screen.RECORDS, Screen.HEALTH, Screen.VISITS)) IconButton(onClick = { vm.navigate(Screen.SETTINGS) }, modifier = Modifier.semantics { contentDescription = "Settings" }) { Glyph("settings") }
                 }
@@ -183,7 +201,7 @@ fun App(vm: WithYouViewModel) {
         }, bottomBar = {
             if (vm.screen in setOf(Screen.HOME, Screen.RECORDS, Screen.HEALTH, Screen.SETTINGS, Screen.VISITS)) {
                 NavigationBar(containerColor = Cream, tonalElevation = 0.dp) {
-                    listOf(Triple("Talk", "mic", Screen.HOME), Triple("Library", "folder", Screen.RECORDS), Triple("Visits", "paper", Screen.VISITS)).forEach { (label, icon, target) ->
+                    listOf(Triple("Talk", "mic", Screen.HOME), Triple("Visits", "paper", Screen.VISITS), Triple("Library", "folder", Screen.RECORDS)).forEach { (label, icon, target) ->
                         NavigationBarItem(selected = vm.screen == target || target == Screen.RECORDS && vm.screen == Screen.HEALTH,
                             onClick = { vm.navigate(target) }, icon = { Glyph(icon) }, label = { Text(label) },
                             colors = NavigationBarItemDefaults.colors(indicatorColor = Peach))
@@ -204,13 +222,16 @@ fun App(vm: WithYouViewModel) {
                     Screen.WRAP_UP -> WrapUpScreen(vm, ui)
                     Screen.SCAN -> ScanScreen(vm, ui)
                     Screen.EXTRACTION -> ExtractionScreen(vm, ui)
-                    Screen.PLAN -> PlanScreen(vm, ui)
+                    Screen.PLAN -> CarePlanScreen(vm, ui)
+                    Screen.PLAN_DETAILS -> PlanDetailsScreen(vm, ui)
                     Screen.SAVE -> SaveScreen(vm, ui)
                     Screen.DOCTOR -> DoctorScreen(vm)
                     Screen.SOURCE -> SourceScreen(vm, ui)
                     Screen.RECORDS -> RecordsScreen(vm)
                     Screen.VISITS -> VisitsScreen(vm)
                     Screen.BRIEF -> BriefSelectionScreen(vm)
+                    Screen.VISIT_CHAT -> VisitChatScreen(vm)
+                    Screen.QUESTIONS -> DoctorQuestionsScreen(vm, ui)
                     Screen.HEALTH -> HealthScreen(vm, ui)
                     Screen.DETAIL -> DetailScreen(vm, ui)
                     Screen.SETTINGS -> SettingsScreen(vm, ui)
@@ -259,12 +280,16 @@ private fun ManualFactDialog(vm: WithYouViewModel, initial: Category, dismiss: (
     var reaction by remember { mutableStateOf("") }
     var timing by remember { mutableStateOf("") }
     var uncertain by remember { mutableStateOf(false) }
+    var choosingCategory by remember { mutableStateOf(false) }
     AlertDialog(onDismissRequest = dismiss, title = { Text("Add a detail") }, text = {
         Column(Modifier.heightIn(max = 450.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) { Category.entries.forEach { item ->
-                FilterChip(selected = category == item, onClick = { category = item }, label = { Text(item.title) })
-            } }
-            OutlinedTextField(text, { text = it }, label = { Text("Exact wording · keep unknowns") }, minLines = 3)
+            Box {
+                OutlinedButton(onClick = { choosingCategory = true }) { Text(category.title) }
+                DropdownMenu(expanded = choosingCategory, onDismissRequest = { choosingCategory = false }) {
+                    Category.entries.forEach { item -> DropdownMenuItem(text = { Text(item.title) }, onClick = { category = item; choosingCategory = false }) }
+                }
+            }
+            OutlinedTextField(text, { text = it }, label = { Text(if (category == Category.ACTION) "Instruction" else "Your wording") }, minLines = 3)
             if (category in setOf(Category.MEDICINE, Category.PAST_MEDICINE, Category.ALLERGY, Category.MEDICINE_CHANGE)) {
                 Text("Optional fields must also appear in the wording above. Leave unknown details blank.", fontSize = 13.sp, color = Muted)
                 OutlinedTextField(name, { name = it }, label = { Text("Medicine / substance name") })

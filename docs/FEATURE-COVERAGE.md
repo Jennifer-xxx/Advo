@@ -60,6 +60,18 @@ Talk is now an automatic listen → short local Gemma response → offline spoke
 
 Brief generation uses compact, bounded patient-text batches, retries ungrounded output once, accepts equivalent numeric typography, rejects changed dose units and stores a specific error for in-place retry. Routine thinking is disabled explicitly; background extraction is not chained automatically after a conversation. Native generation has an explicit Stop action and task/elapsed-time labels. Restart recovery clears abandoned processing states.
 
+## Simplified three-part journey
+
+The later interaction brief is implemented through Talk / Visits / Library navigation:
+
+- Symptom conversations support voice and text, clarification turns and one saved patient dictation. Health-profile maintenance uses a separate record kind and review surface, so it does not appear as a symptom or appointment.
+- Visits starts with symptom selection and a combined brief, or a direct consented recording. Selection can also update the same active visit without creating a second appointment. Doctor questions have a focused page instead of reopening the preparation wizard.
+- Ask Advo answers from a bounded selection of complete, recent transcribed sources. Exact source IDs/quotes and numeric/unit checks are required; unsupported answers abstain. These answers are stored separately from clinical facts and never authorize profile changes or doctor confirmation. New background audio work yields while the clarification page is open; recording itself continues.
+- Before I leave stops and flushes recording, organizes pending segments and prepares a draft summary for individual doctor checks. Users can finish with unresolved items. The care plan always shows next steps even when an AI summary is present, with reviewed-action completion, native date/time reminder selection, and explicit medicine/allergy profile updates.
+- Medicine-change instructions remain visible for review and do not automatically stop, replace or add current medicines. Original/plain wording, document import, source comparison, translation, archive selection and privacy controls remain accessible as secondary tools.
+
+Clinical semantic grounding and live phone latency are still validation gates. Exact quotes and numeric checks do not establish complete medical correctness.
+
 ## Release gates retained
 
 Before use beyond a synthetic hackathon demonstration: validate speech/OCR/translation on representative patient language, medication and uncertainty cases; clinically review patient-facing copy; evaluate real conversations and conflicts; test long recordings, device interruptions, storage exhaustion and thermal/power behavior; perform complete accessibility checks. A broad drug checker requires an appropriate licensed, versioned local reference dataset and its own validation. A Tensor TPU path requires compatible compiled artifacts and vendor libraries.

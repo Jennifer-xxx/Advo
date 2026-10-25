@@ -23,7 +23,7 @@ fun HomeScreen(vm: WithYouViewModel, ui: UiController) {
     Secondary("Type instead") { vm.newVisit() }
     val ongoing = vm.data.visits.lastOrNull { it.kind == RecordKind.SYMPTOM && it.talks.lastOrNull()?.finishedAt == null && it.talks.isNotEmpty() }
     if (ongoing != null) EntryRow("paper", "Continue", ongoing.title) { vm.selectVisit(ongoing.id) }
-    TextButton(onClick = { vm.navigate(Screen.BRIEF) }) { Text("Prepare for a visit", color = Muted) }
+    TextButton(onClick = { vm.openBriefSelection() }) { Text("Prepare for a visit", color = Muted) }
     if (!vm.modelReady) Panel {
         Text(if (vm.modelLoading) "Getting Gemma ready" else "Offline setup", fontWeight = FontWeight.Medium)
         Text(if (vm.modelLoading) "Your local model is loading. You can type and view records while you wait."
@@ -76,7 +76,7 @@ fun PrepareScreen(vm: WithYouViewModel, ui: UiController) {
         Box(Modifier.weight(1f)) { Primary("Done", enabled = phase != TalkPhase.FINISHING) { vm.finishTalk() } }
     }
     if (!vm.talkTyped) TextButton(onClick = { vm.typeTalk() }, enabled = phase != TalkPhase.FINISHING) { Text("Type instead", color = Muted) }
-    if (talk?.turns?.isNotEmpty() == true) {
+    if (!vm.talkTyped && talk?.turns?.isNotEmpty() == true) {
         TextButton(onClick = { transcript = !transcript }) { Text(if (transcript) "Hide conversation" else "View conversation", color = Muted) }
         if (transcript) talk.turns.forEach { turn -> Text("${if (turn.role == TalkRole.PATIENT) "You" else "Advo"}: ${turn.text}", fontSize = 15.sp, lineHeight = 23.sp) }
     }
@@ -202,10 +202,11 @@ fun SourceRow(vm: WithYouViewModel, source: Source) {
 @Composable
 fun ConsentScreen(vm: WithYouViewModel, ui: UiController) {
     var agreed by remember(vm.visitId) { mutableStateOf(false) }
-    Title("May I record?", "Ask everyone in the room first.", centered = true)
-    Spacer(Modifier.height(10.dp))
-    VoiceOrb(false, "Nothing is recording", large = false) { }
-    Text("Audio stays on this phone. You can pause, stop, or withdraw consent at any time.", color = Muted, fontSize = 16.sp, lineHeight = 24.sp)
+    Title("Record this visit?", "Ask everyone in the room first.")
+    Panel {
+        Text("Recording is optional", fontSize = 21.sp, fontWeight = FontWeight.Medium)
+        Text("Audio stays on this phone. You can pause, stop, or withdraw consent at any time.", color = Muted, fontSize = 16.sp, lineHeight = 24.sp)
+    }
     Panel { CheckRow("Everyone agreed", agreed, "For this recording only") { agreed = it } }
     Primary("Start recording", enabled = agreed && vm.visit?.isCapturing != true) {
         ui.withMic { vm.startVisitRecording(agreed) }
@@ -222,25 +223,27 @@ fun LiveScreen(vm: WithYouViewModel, ui: UiController) {
     LaunchedEffect(visit.recordedMs, visit.recording) { while (active) { delay(1000); tick++ } }
     val seconds = visit.recordedMs / 1000 + tick
     Title(when (visit.recording) {
-        Recording.RECORDING -> "I’m listening"
+        Recording.RECORDING -> "Your visit"
         Recording.PAUSED -> "Recording paused"
         Recording.INTERRUPTED -> "Recording interrupted"
         else -> "Here with you"
-    }, if (active) "Quiet support, only when there’s something to ask." else "Your questions and notes are here.", centered = true)
+    }, if (active) "Recording privately on this phone." else "Your questions and notes are here.")
     if (visit.recording in setOf(Recording.RECORDING, Recording.PAUSED)) {
-        VoiceOrb(active, "%02d:%02d · %s".format(seconds / 60, seconds % 60, if (active) "Recording" else "Paused"), large = false) { vm.pauseVisitRecording() }
-        Text("Audio saved in 12-second segments", color = Muted, fontSize = 12.sp, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
-        Secondary(if (active) "Pause recording" else "Resume recording") { vm.pauseVisitRecording() }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            TextButton(onClick = { vm.stopVisitRecording() }) { Text("Stop recording", color = Ink) }
-            TextButton(onClick = { vm.stopVisitRecording(true) }) { Text("Withdraw consent", color = Rust) }
+        Panel {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("%02d:%02d".format(seconds / 60, seconds % 60), fontSize = 30.sp, fontWeight = FontWeight.Medium)
+                    Text(if (active) "Recording" else "Paused", color = Muted, fontSize = 14.sp)
+                }
+                TextButton(onClick = { vm.pauseVisitRecording() }) { Text(if (active) "Pause" else "Resume", color = Rust) }
+            }
         }
     } else {
         if (visit.recording == Recording.INTERRUPTED) Flag("Saved segments are kept. Start a new consented recording when ready.")
         Secondary("Start a recording") { vm.navigate(Screen.CONSENT) }
     }
     val pending = visit.sources.count { it.status in setOf(Processing.QUEUED, Processing.PROCESSING, Processing.FAILED) }
-    if (pending > 0) Text("$pending source segments waiting / processing. You can keep taking notes.", color = Muted, fontSize = 13.sp)
+    if (pending > 0) Text(if (active) "Saved audio is being organized while recording continues" else "Some saved audio still needs organizing", color = Muted, fontSize = 13.sp)
     if (vm.thermal >= android.os.PowerManager.THERMAL_STATUS_SEVERE) Flag("Phone is warm. Live processing is paused; audio keeps saving.")
     val allergies = vm.data.profile.filter { it.status == ProfileStatus.CURRENT && it.fact.category == Category.ALLERGY && !it.fact.needsReview && it.fact.name != null && it.fact.reaction != null }
     val medicine = visit.currentFacts.filter { it.category in setOf(Category.MEDICINE, Category.MEDICINE_CHANGE) && !it.needsReview && it.name != null }
@@ -264,36 +267,25 @@ fun LiveScreen(vm: WithYouViewModel, ui: UiController) {
             TextButton(onClick = { vm.changeQuestion(next.id, state = QuestionState.DISMISSED) }) { Text("Dismiss", color = Muted) }
         }
     }
-    Primary("Before I leave") { vm.setStage(Stage.WRAP_UP, Screen.WRAP_UP) }
+    EntryRow("paper", "Ask Advo", "Clarify something from this visit") { vm.navigate(Screen.VISIT_CHAT) }
+    if (visit.reports.isNotEmpty()) EntryRow("paper", "Your appointment brief", "Symptoms you chose to discuss") { vm.navigate(Screen.REPORT) }
+    else TextButton(onClick = { vm.openBriefSelection(forCurrentVisit = true) }) { Text("Choose symptoms to discuss", color = Rust) }
+    Primary("Before I leave") { vm.prepareWrapUp() }
+    TextButton(onClick = { vm.navigate(Screen.QUESTIONS) }) { Text("My doctor questions", color = Muted) }
+    var more by remember(visit.id) { mutableStateOf(false) }
+    TextButton(onClick = { more = !more }) { Text(if (more) "Less" else "More visit tools", color = Muted) }
+    if (more) {
+    if (visit.isCapturing) {
+        Secondary("Stop recording") { vm.stopVisitRecording() }
+        TextButton(onClick = { vm.stopVisitRecording(true) }) { Text("Withdraw consent", color = Rust) }
+    }
     Secondary("Add a note") { ui.ask("Visit note", "What do you want to remember?", description = "Saved as patient recollection, not as a doctor's recorded words.") { text -> vm.editInput(text); vm.submit(SourceKind.PATIENT_RECOLLECTION) } }
-    Secondary("All questions") { vm.navigate(Screen.REVIEW) }
     Text("Medicine interactions cannot be checked: no validated local drug reference is installed. An absent prompt does not establish safety.", color = Muted, fontSize = 12.sp, lineHeight = 18.sp)
+    }
 }
 
 @Composable
-fun WrapUpScreen(vm: WithYouViewModel, ui: UiController) {
-    val visit = vm.visit ?: return
-    Title("Did I understand?", "Draft from this visit. Check each detail you want to confirm.")
-    listOf(Category.DISCUSSION, Category.MEDICINE_CHANGE, Category.ACTION).forEach { category ->
-        SectionLabel(category.title)
-        val items = visit.currentFacts.filter { it.category == category }
-        if (items.isEmpty()) EntryRow("paper", "${category.title} — please confirm", "Not recorded yet. Add what you understood.") { ui.factCategory = category }
-        items.forEach { FactCard(vm, ui, it, doctorCheck = true) }
-    }
-    val unanswered = visit.questions.filter { it.selected && it.state != QuestionState.ASKED && it.state != QuestionState.DISMISSED }
-    if (unanswered.isNotEmpty()) Panel {
-        SectionLabel("Questions still to ask")
-        unanswered.forEach { q -> Text(q.text); TextButton(onClick = { vm.showDoctor(q.text) }) { Text("Show doctor", color = Rust) } }
-    }
-    Secondary(if (vm.speaking) "Pause read-aloud" else "Read aloud") {
-        vm.readAloud(visit.facts.filter { it.category in setOf(Category.DISCUSSION, Category.MEDICINE_CHANGE, Category.ACTION) }
-            .joinToString("\n") { it.quote + if (it.needsReview) ". Please confirm." else "" })
-    }
-    Secondary("Add something I understood") { ui.factCategory = Category.ACTION }
-    Primary("Continue to papers & plan") { vm.setStage(Stage.POST_VISIT, Screen.SCAN) }
-    TextButton(onClick = { vm.setStage(Stage.POST_VISIT, Screen.SCAN) }) { Text("Finish without confirming", color = Muted) }
-    if (visit.unresolved.isNotEmpty()) Flag("${visit.unresolved.size} details still need review. They will stay flagged.")
-}
+fun WrapUpScreen(vm: WithYouViewModel, ui: UiController) = VisitConfirmationScreen(vm, ui)
 
 @Composable
 fun ScanScreen(vm: WithYouViewModel, ui: UiController) {
@@ -311,7 +303,7 @@ fun ScanScreen(vm: WithYouViewModel, ui: UiController) {
     Secondary("Add a memory by voice") { vm.navigate(Screen.PREPARE); ui.withMic { vm.startDictation() } }
     Secondary("Add a written memory") { ui.ask("Patient recollection", "What do you remember?") { vm.editInput(it); vm.submit(SourceKind.PATIENT_RECOLLECTION) } }
     Primary("Review saved details") { vm.navigate(Screen.EXTRACTION) }
-    TextButton(onClick = { vm.navigate(Screen.PLAN) }) { Text("Continue without a paper", color = Muted) }
+    TextButton(onClick = { vm.navigate(if (visit.kind == RecordKind.VISIT) Screen.PLAN else Screen.DETAIL) }) { Text("Continue without a paper", color = Muted) }
 }
 
 @Composable
@@ -351,11 +343,12 @@ fun ExtractionScreen(vm: WithYouViewModel, ui: UiController) {
     } else Panel { Text("No extracted details yet."); Text("Your originals remain available. Extract them locally or add what you understood.", color = Muted) }
     Secondary("Add a detail manually") { ui.factCategory = Category.ACTION }
     if (visit.kind == RecordKind.SYMPTOM) Primary("Back to symptom entry") { vm.navigate(Screen.DETAIL) }
+    else if (visit.kind == RecordKind.PROFILE) Primary("Review profile update") { vm.navigate(Screen.DETAIL) }
     else Primary("See my plan") { vm.navigate(Screen.PLAN) }
 }
 
 @Composable
-fun PlanScreen(vm: WithYouViewModel, ui: UiController) {
+fun PlanDetailsScreen(vm: WithYouViewModel, ui: UiController) {
     val visit = vm.visit ?: return
     var plain by remember { mutableStateOf(true) }
     Title("Here’s your plan", "Based on saved sources. Confirm instructions with your clinician.")
@@ -378,11 +371,7 @@ fun PlanScreen(vm: WithYouViewModel, ui: UiController) {
                     if (fact.needsReview) Flag("Needs confirmation")
                     if (category == Category.ACTION && fact.timing == null) Text("Timing needs confirmation.", color = Muted, fontSize = 13.sp)
                     TextButton(onClick = { vm.openSource(fact.sourceId) }) { Text("View source", color = Rust) }
-                    if (category == Category.ACTION && !fact.needsReview) Secondary("Set a local reminder") {
-                        ui.ask("Choose your reminder", "Local date and time · YYYY-MM-DDTHH:MM", description = "Choose a time yourself. The app does not infer a date from this instruction. Time zone: ${java.time.ZoneId.systemDefault()}. Delivery is approximate.") { time ->
-                            ui.withNotifications { vm.scheduleReminder(fact.id, time) }
-                        }
-                    }
+                    if (category == Category.ACTION && !fact.needsReview) Secondary("Set a reminder") { ui.remind(fact) }
                 }
             }
         }

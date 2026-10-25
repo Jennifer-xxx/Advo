@@ -9,15 +9,18 @@ Advo is a private, on-device health companion powered by Gemma. It helps patient
 Advo helps patients speak clearly, connect the dots, and keep their whole health story:
 
 - **Before:** Patients describe symptoms by voice in their own words. Advo asks short follow-ups about onset, severity, duration and change, then creates a one-page brief for the doctor, with continuation pages when needed.
-- **During:** With consent, Advo listens, tracks unanswered questions and surfaces questions about new prescriptions and the patient’s saved records. It never diagnoses. The current demo supports exact reviewed medicine/allergy-name comparisons; comprehensive medication-interaction checking requires a validated local reference database and is explicitly unavailable.
+- **During:** Patients select prior symptom entries for an appointment brief. With consent, Advo listens, answers clarification questions from saved visit wording, tracks unanswered questions and surfaces questions about new prescriptions and the patient’s saved records. It never diagnoses. The current demo supports exact reviewed medicine/allergy-name comparisons; comprehensive medication-interaction checking requires a validated local reference database and is explicitly unavailable.
 - **After:** Each visit stays in a personal health Library: medications, allergies, appointments, source papers and reports. Patients can explicitly export and share a report with a caregiver; nothing is sent automatically.
 
-## A simple everyday flow
+## Three simple moments
 
-- **Talk:** tap once and speak naturally. Advo acknowledges your words, asks one short follow-up, reads it aloud with an installed offline voice, and listens again automatically. Pause and Done are the main controls; Type instead opens a chat composer.
-- **Library:** each conversation is saved as one long-term symptom entry with the complete patient dictation and a draft summary. Assistant questions are stored separately and never treated as patient evidence. A symptom entry has no required appointment stages.
-- **Prepare for a visit:** select the symptom entries you want to include. Advo combines their dated history into a concise appointment brief and generates a local PDF. Share, save and print live under one Export brief menu.
-- **Visits:** a separate page contains appointment briefs and actual visit recordings, with a direct Start visit recording button. Recording still requires consent from everyone present.
+The bottom navigation is **Talk · Visits · Library**. Daily symptoms remain separate from appointments.
+
+1. **Before — talk or type.** Tap once and speak naturally, or use a chat composer. Advo acknowledges what you said and asks one short clarification at a time. Voice replies use an installed offline voice and listening resumes automatically. Tap Done to save the entire patient dictation as one symptom entry with a draft summary. Assistant questions remain separate from patient evidence.
+2. **During — choose, communicate, record.** Open Visits → Prepare for a visit, choose symptom entries with readable previews, and create one appointment brief. Export lives in one menu. Start the visit with consent, or continue without recording. A direct Record a visit button is also available. The visit keeps its brief, audio, doctor questions and **Ask Advo** together. Ask Advo explains the latest transcribed visit wording with exact source quotes; missing information produces an abstention. Before I leave stops recording, organizes pending audio and prepares a summary and individual details to confirm with the doctor.
+3. **After — follow the care plan.** Finish visit opens the summary and next-step list directly. Reviewed actions can be marked complete or given a local reminder using native date and time pickers. Medicine/allergy drafts offer explicit Confirm & add to health profile; conflicting or unclear details stay blocked until resolved. Medicine-change instructions are shown separately for review, without automatically stopping or replacing current medicines. Done returns to Visits; the plan, symptom history and current health profile remain accessible.
+
+Paper import, source comparison, translations, archive selection, export and privacy tools remain available through contextual More sections. They are optional branches of the main flow.
 
 After Done, Advo performs one summary pass. Detailed structured extraction remains available when requested, rather than silently running after every conversation. Routine inference explicitly disables thinking, and spoken replies reuse the conversation context. Progress names the actual operation, shows elapsed time and offers Stop for active native generation. Interrupted jobs become retryable rather than displaying a permanent spinner.
 
@@ -89,7 +92,7 @@ The connected hardware reports **Pixel 11 Pro / Tensor G6**. GPU/CPU fallback re
 
 ## Safety and data design
 
-Gemma transcribes audio, reads papers, extracts grounded facts, asks one preparation question, proposes optional visit questions, translates and explains supplied facts. Application code owns permissions, consent, state transitions, persistence, profile changes, sharing and deletion. The model has no tools that can perform those actions.
+Gemma transcribes audio, reads papers, extracts grounded facts, asks conversational symptom follow-ups, summarizes selected symptom history, proposes optional visit questions, answers source-linked visit clarification questions, translates and explains supplied facts. Application code owns permissions, consent, state transitions, persistence, profile changes, sharing and deletion. The model has no tools that can perform those actions.
 
 Extraction responses must pass a strict contract: allowed keys and enums, string/boolean types, actual source IDs, verbatim source quotes and literal supporting medication fields. Invalid output retries once, then preserves the source for retry/manual editing. Model output never becomes a reviewed fact automatically. Transcription and OCR can still make errors; every extracted clinical detail starts as a draft.
 

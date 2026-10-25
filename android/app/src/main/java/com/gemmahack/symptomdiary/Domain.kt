@@ -102,6 +102,13 @@ data class ReportSnapshot(
 
 data class ActionReminder(val id: String, val factId: String, val at: String, val zone: String)
 
+data class AnswerEvidence(val sourceId: String, val quote: String)
+data class VisitClarification(
+    val id: String = newId(), val createdAt: String = now(), val question: String,
+    val answer: String = "", val evidence: List<AnswerEvidence> = emptyList(),
+    val status: Processing = Processing.PROCESSING, val error: String? = null,
+)
+
 data class Visit(
     val id: String = newId(), val createdAt: String = now(), val updatedAt: String = now(),
     val title: String = "New visit", val stage: Stage = Stage.PREPARING,
@@ -123,6 +130,8 @@ data class Visit(
     val briefSummary: String = "",
     val briefSourceFingerprint: String = "",
     val briefStatus: Processing = Processing.IDLE, val briefError: String? = null,
+    val clarifications: List<VisitClarification> = emptyList(),
+    val completedActionIds: List<String> = emptyList(),
 ) {
     val currentFacts: List<Fact> get() = facts.filter { !it.superseded }
     val unresolved: List<Fact> get() = currentFacts.filter { it.needsReview }
@@ -180,6 +189,8 @@ object VisitRules {
         },
         briefStatus = if (visit.briefStatus == Processing.PROCESSING) Processing.FAILED else visit.briefStatus,
         briefError = if (visit.briefStatus == Processing.PROCESSING) "Brief generation was interrupted. Your records are safe; retry when ready." else visit.briefError,
+        clarifications = visit.clarifications.map { if (it.status == Processing.PROCESSING) it.copy(
+            status = Processing.FAILED, error = "Interrupted. Ask again when ready.") else it },
     )
 
     fun mergeFacts(old: List<Fact>, incoming: List<Fact>): List<Fact> {

@@ -72,6 +72,13 @@ class VisitIntelligence(context: Context, private val engine: GemmaEngine) {
         return result
     }
 
+    suspend fun clarifyVisit(question: String, passages: List<ClarificationRules.Passage>): Pair<ClarificationRules.Answer, Double> {
+        if (passages.isEmpty()) return ClarificationRules.Answer(ClarificationRules.UNKNOWN, emptyList()) to 0.0
+        val result = engine.generate(system, prompt("visit-clarification-v1") + "\n" + StoreCodec.gson.toJson(
+            mapOf("question" to question, "saved_visit_wording" to passages)), maxOutput = 450)
+        return ClarificationRules.parse(result.text, passages) to result.seconds
+    }
+
     suspend fun longitudinalBrief(records: List<Visit>, progress: (String) -> Unit = {}): GemmaEngine.Result {
         if (!engine.ready) throw BriefException(BriefFailure.MODEL_NOT_READY)
         val passages = BriefInput.passages(records)
